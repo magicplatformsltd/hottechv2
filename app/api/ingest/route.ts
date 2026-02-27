@@ -1,7 +1,9 @@
 import Parser from "rss-parser";
 import OpenAI from "openai";
 import { createClient } from "@supabase/supabase-js";
+import { headers } from "next/headers";
 import { NextResponse } from "next/server";
+import { createClient as createServerClient } from "@/utils/supabase/server";
 
 /** AI returns names; we resolve to DB IDs using pre-fetched maps. */
 type NameBasedClassification = {
@@ -163,6 +165,24 @@ Match the article to the best category and optional tags/content type. Use EXACT
 }
 
 export async function GET() {
+  const headersList = await headers();
+  const isCron = headersList.get("x-vercel-cron") === "1";
+
+  // Allow manual syncing from Admin panel when user has admin role
+  let isAdmin = false;
+  if (!isCron) {
+    const supabaseAuth = await createServerClient();
+    const { data: { user } } = await supabaseAuth.auth.getUser();
+    isAdmin =
+      !!user &&
+      ((user.app_metadata as { role?: string } | undefined)?.role === "admin" ||
+        (user.user_metadata as { role?: string } | undefined)?.role === "admin");
+  }
+
+  if (!isCron && !isAdmin) {
+    return new Response("Unauthorized", { status: 401 });
+  }
+
   try {
     const supabase = getSupabaseAdmin();
     const parser = new Parser({

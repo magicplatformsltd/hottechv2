@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ClearCacheButton } from "@/app/components/admin/ClearCacheButton";
 import { SyncButton } from "@/app/components/admin/SyncButton";
 import { signOut } from "./actions";
 import { cn } from "@/lib/utils";
@@ -91,8 +92,9 @@ export function AdminSidebar({ userEmail }: { userEmail: string }) {
           ))}
         </div>
       </nav>
-      <div className="border-t border-white/10 p-3">
+      <div className="border-t border-white/10 p-3 space-y-2">
         <SyncButton />
+        <ClearCacheButton />
         <p className="mt-3 truncate px-3 py-1 font-sans text-xs text-gray-400">
           {userEmail}
         </p>
