@@ -22,6 +22,7 @@ type SiteSettingsRow = {
   cta_settings: CtaSettings;
   social_links: unknown;
   timezone: string | null;
+  copyright_text: string | null;
   updated_at: string;
 };
 
@@ -63,6 +64,7 @@ export default function AdminSettingsPage() {
   const [ctaLabel, setCtaLabel] = useState("");
   const [ctaUrl, setCtaUrl] = useState("");
   const [timezone, setTimezone] = useState("America/New_York");
+  const [copyrightText, setCopyrightText] = useState("");
 
   const supabase = getSupabase();
 
@@ -85,6 +87,7 @@ export default function AdminSettingsPage() {
       setCtaLabel(cta.label ?? "Subscribe");
       setCtaUrl(cta.url ?? "");
       setTimezone(row.timezone?.trim() || "America/New_York");
+      setCopyrightText(row.copyright_text?.trim() || "");
     }
     setLoading(false);
   }, [supabase]);
@@ -115,6 +118,7 @@ export default function AdminSettingsPage() {
           url: ctaType === "custom" ? ctaUrl : "",
         },
         timezone: timezone || "America/New_York",
+        copyright_text: copyrightText?.trim() || null,
         updated_at: new Date().toISOString(),
       })
       .eq("id", 1);
@@ -136,6 +140,7 @@ export default function AdminSettingsPage() {
     ctaLabel,
     ctaUrl,
     timezone,
+    copyrightText,
   ]);
 
   if (loading) {
@@ -186,6 +191,18 @@ export default function AdminSettingsPage() {
             onChange={(e) => setSiteName(e.target.value)}
             className="w-full max-w-md rounded-md border border-white/20 bg-black px-3 py-2 font-sans text-hot-white placeholder-gray-500 focus:border-white/40 focus:outline-none"
             placeholder="Hot Tech"
+          />
+        </div>
+        <div>
+          <label className="mb-1 block font-sans text-sm text-gray-400">
+            Copyright Text
+          </label>
+          <input
+            type="text"
+            value={copyrightText}
+            onChange={(e) => setCopyrightText(e.target.value)}
+            className="w-full max-w-md rounded-md border border-white/20 bg-black px-3 py-2 font-sans text-hot-white placeholder-gray-500 focus:border-white/40 focus:outline-none"
+            placeholder="International House of Technology Ltd."
           />
         </div>
         <div>

@@ -11,15 +11,18 @@ import type {
   FooterNewsletterBlockData,
   FooterMenuBlockData,
   FooterSocialBlockData,
+  SiteSettings,
 } from "@/lib/types";
-
-const CURRENT_YEAR = new Date().getFullYear();
 
 type FooterProps = {
   config?: FooterConfig | null;
+  settings?: SiteSettings | null;
 };
 
-export function Footer({ config }: FooterProps) {
+export function Footer({ config, settings }: FooterProps) {
+  const year = new Date().getFullYear();
+  const copyrightOwner =
+    settings?.copyright_text?.trim() || settings?.site_name?.trim() || "House of Tech";
   const columns = config?.columns ?? [[], [], []];
   const hasAnyBlock = columns.some((col) => col.length > 0);
 
@@ -45,7 +48,7 @@ export function Footer({ config }: FooterProps) {
         )}
 
         <p className="mt-8 border-t border-hot-gray pt-8 text-center text-sm text-hot-white/60">
-          © {CURRENT_YEAR} International House of Technology Ltd.
+          © {year} {copyrightOwner}
         </p>
       </div>
     </footer>

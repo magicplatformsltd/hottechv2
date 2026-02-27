@@ -15,7 +15,7 @@ export default async function WebsiteLayout({
       <ReactiveBackground />
       <Navbar settings={settings} />
       <main className="min-h-screen pt-20">{children}</main>
-      <Footer config={settings?.footer_config ?? null} />
+      <Footer config={settings?.footer_config ?? null} settings={settings} />
     </>
   );
 }

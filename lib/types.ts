@@ -142,5 +142,6 @@ export interface SiteSettings {
   seo_template_archive: string | null;
   seo_template_page: string | null;
   timezone?: string;
+  copyright_text?: string;
   updated_at: string;
 }
