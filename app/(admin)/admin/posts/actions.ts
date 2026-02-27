@@ -75,7 +75,7 @@ export async function getPosts(): Promise<PostRow[]> {
   const client = await createClient();
   const { data, error } = await client
     .from("posts")
-    .select("id, title, slug, excerpt, content, main_image, status, created_at, updated_at, post_categories(categories(name))")
+    .select("id, title, slug, excerpt, content, main_image, status, created_at, updated_at, published_at, post_categories(categories(name))")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -299,6 +299,7 @@ export async function updatePost(
   const excerpt = (formData.get("excerpt") as string)?.trim() ?? null;
   const body = formData.get("body") as string;
   const featured_image = (formData.get("featured_image") as string) || null;
+  const published_at = (formData.get("published_at") as string)?.trim() || null;
   const categoryIds = (formData.getAll("category_ids") as string[]).map((s) => parseInt(s, 10)).filter((n) => !Number.isNaN(n));
   const tagIds = (formData.getAll("tag_ids") as string[]).map((s) => parseInt(s, 10)).filter((n) => !Number.isNaN(n));
   const contentTypeIdRaw = formData.get("content_type_id");
@@ -315,6 +316,13 @@ export async function updatePost(
     draft_content: body ?? null,
     draft_hero_image: featured_image ?? null,
   };
+  if (published_at) {
+    try {
+      payload.published_at = new Date(published_at).toISOString();
+    } catch {
+      // ignore invalid date
+    }
+  }
 
   const client = await createClient();
   const { error } = await client.from("posts").update(payload).eq("id", id);

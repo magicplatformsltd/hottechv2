@@ -4,6 +4,7 @@ import { getPostById, getPostTaxonomies } from "../actions";
 import { getCategories } from "@/lib/actions/categories";
 import { getTags } from "@/lib/actions/tags";
 import { getContentTypes } from "@/lib/actions/content-types";
+import { getSiteSettings } from "@/lib/data";
 import { EditPostForm } from "../edit-post-form";
 
 type PageProps = {
@@ -12,12 +13,13 @@ type PageProps = {
 
 export default async function EditPostPage({ params }: PageProps) {
   const { id } = await params;
-  const [post, taxonomies, categories, tags, contentTypes] = await Promise.all([
+  const [post, taxonomies, categories, tags, contentTypes, settings] = await Promise.all([
     getPostById(id),
     getPostTaxonomies(id),
     getCategories(),
     getTags(),
     getContentTypes(),
+    getSiteSettings(),
   ]);
 
   if (!post) {
@@ -45,6 +47,7 @@ export default async function EditPostPage({ params }: PageProps) {
         initialCategoryIds={taxonomies.categoryIds}
         initialTagIds={taxonomies.tagIds}
         initialContentTypeId={taxonomies.contentTypeId}
+        siteTimezone={settings?.timezone}
       />
     </div>
   );

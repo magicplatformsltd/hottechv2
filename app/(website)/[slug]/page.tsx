@@ -29,6 +29,8 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const post = await getPostBySlug(slug);
   if (!post) return {};
   if (post.status !== "published") return { title: "Preview" };
+  // Embargo: don't expose metadata for future-dated posts (crawlers)
+  if (post.published_at && new Date(post.published_at) > new Date()) return { title: "Preview" };
   const category = await getPostPrimaryCategoryName(post.id);
   return await constructMetadata({
     title: post.title ?? "Untitled",
@@ -59,6 +61,20 @@ export default async function ArticlePage({ params }: PageProps) {
       (user.app_metadata as { role?: string } | undefined)?.role === "admin" ||
       (user.user_metadata as { role?: string } | undefined)?.role === "admin";
     if (!isAuthor && !isAdmin) notFound();
+  }
+
+  // Embargo: block future-dated published posts for non-admins
+  if (isPublished && post.published_at) {
+    const pubDate = new Date(post.published_at);
+    if (pubDate > new Date()) {
+      const supabase = await createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      const isAdmin =
+        user &&
+        ((user.app_metadata as { role?: string } | undefined)?.role === "admin" ||
+          (user.user_metadata as { role?: string } | undefined)?.role === "admin");
+      if (!isAdmin) notFound();
+    }
   }
 
   const isDraftPreview = !isPublished;

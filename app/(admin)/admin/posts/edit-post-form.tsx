@@ -14,13 +14,39 @@ import { SidebarSection } from "@/app/components/admin/posts/SidebarSection";
 import { ShowcaseManager, type ShowcaseItem } from "@/app/components/admin/posts/ShowcaseManager";
 import { TagInput, type SelectedTag } from "@/app/components/admin/posts/TagInput";
 import { UniversalImagePicker } from "@/app/components/admin/shared/UniversalImagePicker";
+import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 
-function toDatetimeLocal(iso: string | null): string {
+const DEFAULT_TIMEZONE = "America/New_York";
+
+function toDatetimeLocalInTz(iso: string | null, timezone: string): string {
   if (!iso) return "";
   try {
-    return new Date(iso).toISOString().slice(0, 16);
+    return formatInTimeZone(new Date(iso), timezone, "yyyy-MM-dd'T'HH:mm");
   } catch {
     return "";
+  }
+}
+
+/** Convert datetime-local string (in site timezone) to UTC ISO. */
+function fromDatetimeLocalToUtc(localStr: string, timezone: string): string {
+  if (!localStr || localStr.length < 16) return "";
+  try {
+    const [datePart, timePart] = localStr.split("T");
+    const [y, m, d] = (datePart ?? "").split("-").map(Number);
+    const [h, min] = (timePart ?? "").split(":").map(Number);
+    const localDate = new Date(y, (m ?? 1) - 1, d ?? 1, h ?? 0, min ?? 0, 0);
+    return fromZonedTime(localDate, timezone).toISOString();
+  } catch {
+    return "";
+  }
+}
+
+/** Get short timezone label (e.g. EST, EDT) for display. */
+function getTimezoneLabel(timezone: string): string {
+  try {
+    return formatInTimeZone(new Date(), timezone, "zzz");
+  } catch {
+    return timezone;
   }
 }
 
@@ -52,6 +78,7 @@ type EditPostFormProps = {
   initialCategoryIds: number[];
   initialTagIds: number[];
   initialContentTypeId: number | null;
+  siteTimezone?: string;
 };
 
 export function EditPostForm({
@@ -62,6 +89,7 @@ export function EditPostForm({
   initialCategoryIds,
   initialTagIds,
   initialContentTypeId,
+  siteTimezone = DEFAULT_TIMEZONE,
 }: EditPostFormProps) {
   const router = useRouter();
   const [title, setTitle] = useState(post?.title ?? "");
@@ -71,7 +99,9 @@ export function EditPostForm({
   const [status, setStatus] = useState<"draft" | "published">(
     (post?.status as "draft" | "published") || "draft"
   );
-  const [publishedAt, setPublishedAt] = useState(toDatetimeLocal(post?.published_at ?? null));
+  const [publishedAt, setPublishedAt] = useState(
+    toDatetimeLocalInTz(post?.published_at ?? null, siteTimezone)
+  );
   const [sourceName, setSourceName] = useState(post?.source_name ?? "");
   const [originalUrl, setOriginalUrl] = useState(post?.original_url ?? "");
   const [metaTitle, setMetaTitle] = useState(post?.meta_title ?? "");
@@ -117,6 +147,12 @@ export function EditPostForm({
   const editorRef = useRef<RichTextEditorHandle>(null);
 
   const categoryRows = useMemo(() => buildCategoryRows(categories), [categories]);
+
+  const isScheduled = (() => {
+    if (status !== "published" || !publishedAt) return false;
+    const utc = fromDatetimeLocalToUtc(publishedAt, siteTimezone);
+    return !!utc && new Date(utc) > new Date();
+  })();
   const selectedContentTypeSlug =
     contentTypes.find((ct) => ct.id === selectedContentTypeId)?.slug ?? null;
   const isShowcase = selectedContentTypeSlug?.startsWith("showcase_") ?? false;
@@ -211,7 +247,10 @@ export function EditPostForm({
     formData.set("body", latestContent);
     formData.set("featured_image", featuredImageUrl ?? "");
     formData.set("status", "draft");
-    if (publishedAt) formData.set("published_at", publishedAt);
+    if (publishedAt) {
+      const utcIso = fromDatetimeLocalToUtc(publishedAt, siteTimezone);
+      if (utcIso) formData.set("published_at", utcIso);
+    }
     formData.set("source_name", sourceName);
     formData.set("original_url", originalUrl);
     formData.set("meta_title", metaTitle);
@@ -368,7 +407,10 @@ export function EditPostForm({
           </div>
         )}
 
-        <SidebarSection title="Publish Date" defaultOpen={true}>
+        <SidebarSection
+          title={`Publish Date (${getTimezoneLabel(siteTimezone)})`}
+          defaultOpen={true}
+        >
           <input
             type="datetime-local"
             value={publishedAt}
@@ -476,7 +518,9 @@ export function EditPostForm({
               className="w-full rounded-md border border-white/10 bg-hot-black px-3 py-2 font-sans text-sm text-hot-white focus:border-hot-white/30 focus:outline-none"
             >
               <option value="draft">Draft</option>
-              <option value="published">Published</option>
+              <option value="published">
+                {status === "published" && isScheduled ? "Scheduled" : "Published"}
+              </option>
             </select>
             <div className="flex gap-2">
               <button
@@ -495,11 +539,17 @@ export function EditPostForm({
               >
                 {post?.id
                   ? isPublishing
-                    ? "Publishing…"
-                    : "Publish"
+                    ? isScheduled
+                      ? "Scheduling…"
+                      : "Publishing…"
+                    : isScheduled
+                      ? "Schedule"
+                      : "Publish"
                   : saving
                     ? "Saving…"
-                    : "Publish"}
+                    : isScheduled
+                      ? "Schedule"
+                      : "Publish"}
               </button>
             </div>
             <button

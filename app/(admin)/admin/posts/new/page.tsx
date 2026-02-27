@@ -2,13 +2,15 @@ import Link from "next/link";
 import { getCategories } from "@/lib/actions/categories";
 import { getTags } from "@/lib/actions/tags";
 import { getContentTypes } from "@/lib/actions/content-types";
+import { getSiteSettings } from "@/lib/data";
 import { EditPostForm } from "../edit-post-form";
 
 export default async function NewPostPage() {
-  const [categories, tags, contentTypes] = await Promise.all([
+  const [categories, tags, contentTypes, settings] = await Promise.all([
     getCategories(),
     getTags(),
     getContentTypes(),
+    getSiteSettings(),
   ]);
 
   return (
@@ -32,6 +34,7 @@ export default async function NewPostPage() {
         initialCategoryIds={[]}
         initialTagIds={[]}
         initialContentTypeId={null}
+        siteTimezone={settings?.timezone}
       />
     </div>
   );

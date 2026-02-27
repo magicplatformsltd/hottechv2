@@ -139,5 +139,6 @@ export interface SiteSettings {
   seo_template_post: string | null;
   seo_template_archive: string | null;
   seo_template_page: string | null;
+  timezone?: string;
   updated_at: string;
 }

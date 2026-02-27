@@ -21,8 +21,18 @@ type SiteSettingsRow = {
   navigation_menu: unknown;
   cta_settings: CtaSettings;
   social_links: unknown;
+  timezone: string | null;
   updated_at: string;
 };
+
+const TIMEZONE_OPTIONS = [
+  { value: "America/New_York", label: "Eastern (America/New_York)" },
+  { value: "America/Chicago", label: "Central (America/Chicago)" },
+  { value: "America/Denver", label: "Mountain (America/Denver)" },
+  { value: "America/Los_Angeles", label: "Pacific (America/Los_Angeles)" },
+  { value: "Europe/London", label: "London (Europe/London)" },
+  { value: "UTC", label: "UTC" },
+] as const;
 
 const DEFAULT_CTA: CtaSettings = {
   type: "subscribe",
@@ -52,6 +62,7 @@ export default function AdminSettingsPage() {
   const [ctaType, setCtaType] = useState("subscribe");
   const [ctaLabel, setCtaLabel] = useState("");
   const [ctaUrl, setCtaUrl] = useState("");
+  const [timezone, setTimezone] = useState("America/New_York");
 
   const supabase = getSupabase();
 
@@ -73,6 +84,7 @@ export default function AdminSettingsPage() {
       setCtaType(cta.type ?? "subscribe");
       setCtaLabel(cta.label ?? "Subscribe");
       setCtaUrl(cta.url ?? "");
+      setTimezone(row.timezone?.trim() || "America/New_York");
     }
     setLoading(false);
   }, [supabase]);
@@ -102,6 +114,7 @@ export default function AdminSettingsPage() {
           label: ctaLabel || "Subscribe",
           url: ctaType === "custom" ? ctaUrl : "",
         },
+        timezone: timezone || "America/New_York",
         updated_at: new Date().toISOString(),
       })
       .eq("id", 1);
@@ -122,6 +135,7 @@ export default function AdminSettingsPage() {
     ctaType,
     ctaLabel,
     ctaUrl,
+    timezone,
   ]);
 
   if (loading) {
@@ -310,6 +324,32 @@ export default function AdminSettingsPage() {
             />
           </div>
         )}
+      </section>
+
+      {/* Section 3: Localization */}
+      <section className="space-y-4 rounded-lg border border-white/10 bg-white/5 p-6">
+        <h2 className="font-sans text-lg font-semibold text-hot-white">
+          Localization
+        </h2>
+        <div>
+          <label className="mb-1 block font-sans text-sm text-gray-400">
+            Timezone
+          </label>
+          <select
+            value={timezone}
+            onChange={(e) => setTimezone(e.target.value)}
+            className="w-full max-w-md rounded-md border border-white/20 bg-black px-3 py-2 font-sans text-hot-white focus:border-white/40 focus:outline-none"
+          >
+            {TIMEZONE_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+          <p className="mt-1 font-sans text-xs text-gray-500">
+            Used for publishing dates and schedule display across the CMS.
+          </p>
+        </div>
       </section>
 
       <SeoSettings />

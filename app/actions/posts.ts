@@ -9,10 +9,12 @@ export async function getMorePosts(
   limit: number = 21
 ): Promise<FeedItem[]> {
   const supabase = await createClient();
+  const nowIso = new Date().toISOString();
   const { data, error } = await supabase
     .from("posts")
     .select("id, title, slug, excerpt, main_image, featured_image, original_url, published_at, created_at, updated_at, type, source_name")
     .eq("status", "published")
+    .lte("published_at", nowIso)
     .order("published_at", { ascending: false })
     .range(offset, offset + limit - 1);
 

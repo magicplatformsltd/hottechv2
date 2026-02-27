@@ -120,11 +120,13 @@ export async function getAuthoryFeed(): Promise<FeedItem[]> {
 /** Fetch posts by IDs and map to FeedItem[] in the order of ids. */
 export async function getPostsByIds(ids: string[]): Promise<FeedItem[]> {
   if (ids.length === 0) return [];
+  const nowIso = new Date().toISOString();
   const { data, error } = await supabase
     .from("posts")
     .select("id, title, slug, excerpt, main_image, featured_image, original_url, published_at, created_at, updated_at, type, source_name")
     .in("id", ids)
-    .eq("status", "published");
+    .eq("status", "published")
+    .lte("published_at", nowIso);
 
   if (error) {
     console.error("[getPostsByIds]", error);
@@ -222,15 +224,17 @@ export async function getSmartFeedPosts(
 
   if (postIds !== null && postIds.length === 0) return [];
 
-  const query = supabase
+  const nowIso = new Date().toISOString();
+  let query = supabase
     .from("posts")
     .select("id, title, slug, excerpt, main_image, featured_image, original_url, published_at, created_at, updated_at, source_name")
     .eq("status", "published")
+    .lte("published_at", nowIso)
     .order("published_at", { ascending: false })
     .limit(limitNum);
 
   if (postIds !== null) {
-    query.in("id", postIds);
+    query = query.in("id", postIds);
   }
 
   const { data, error } = await query;
@@ -334,11 +338,13 @@ export async function getPostsByTaxonomy(
     return { title: name, description: `All our latest ${name}.`, posts: [] };
   }
 
+  const nowIso = new Date().toISOString();
   const { data: rows, error } = await supabase
     .from("posts")
     .select("id, title, slug, excerpt, main_image, featured_image, original_url, published_at, created_at, updated_at, source_name")
     .in("id", postIds)
     .eq("status", "published")
+    .lte("published_at", nowIso)
     .order("published_at", { ascending: false });
 
   if (error) {
@@ -399,10 +405,12 @@ export async function getTaxonomyBySlug(
 
 /** Published posts from Supabase for the unified feed. */
 export async function getSupabasePosts(): Promise<FeedItem[]> {
+  const nowIso = new Date().toISOString();
   const { data, error } = await supabase
     .from("posts")
     .select("id, title, slug, excerpt, main_image, featured_image, original_url, published_at, created_at, updated_at, type, source_name")
     .eq("status", "published")
+    .lte("published_at", nowIso)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -692,10 +700,12 @@ export async function getSiteSettings(): Promise<SiteSettings | null> {
 export async function getPostSlugsForSitemap(): Promise<
   { slug: string; updated_at: string | null }[]
 > {
+  const nowIso = new Date().toISOString();
   const { data, error } = await supabase
     .from("posts")
     .select("slug, updated_at, id")
-    .eq("status", "published");
+    .eq("status", "published")
+    .lte("published_at", nowIso);
   if (error) {
     console.error("[getPostSlugsForSitemap]", error);
     return [];

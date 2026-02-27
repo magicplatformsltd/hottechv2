@@ -16,10 +16,12 @@ export async function searchPosts(query?: string): Promise<PostPickerPost[]> {
   const { data: { user } } = await client.auth.getUser();
   if (!user) return [];
 
+  const nowIso = new Date().toISOString();
   let q = client
     .from("posts")
     .select("id, title, slug, excerpt, main_image, published_at")
     .eq("status", "published")
+    .lte("published_at", nowIso)
     .order("published_at", { ascending: false });
 
   const trimmed = (query ?? "").trim();

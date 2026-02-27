@@ -69,12 +69,22 @@ export function PostsTable({ posts }: { posts: PostRow[] }) {
           <td className="w-32 shrink-0 px-4 py-3 text-right">
             <span
               className={
-                post.status === "published"
-                  ? "rounded-full bg-green-500/20 px-2 py-0.5 text-xs text-green-400"
-                  : "rounded-full bg-amber-500/20 px-2 py-0.5 text-xs text-amber-400"
+                post.status === "published" &&
+                post.published_at &&
+                new Date(post.published_at) > new Date()
+                  ? "rounded-full bg-blue-500/20 px-2 py-0.5 text-xs text-blue-400"
+                  : post.status === "published"
+                    ? "rounded-full bg-green-500/20 px-2 py-0.5 text-xs text-green-400"
+                    : "rounded-full bg-amber-500/20 px-2 py-0.5 text-xs text-amber-400"
               }
             >
-              {post.status === "published" ? "Published" : "Draft"}
+              {post.status === "published" &&
+              post.published_at &&
+              new Date(post.published_at) > new Date()
+                ? "Scheduled"
+                : post.status === "published"
+                  ? "Published"
+                  : "Draft"}
             </span>
           </td>
           <td className="w-48 shrink-0 px-4 py-3 text-right text-gray-400">
