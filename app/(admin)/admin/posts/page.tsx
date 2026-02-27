@@ -25,16 +25,13 @@ export default async function AdminPostsPage() {
           <thead>
             <tr className="border-b border-white/10 bg-white/5">
               <th className="w-auto min-w-0 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
-                Title
+                Content
               </th>
-              <th className="w-40 shrink-0 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
-                Categories
-              </th>
-              <th className="w-32 shrink-0 px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-400">
+              <th className="w-28 shrink-0 px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-400">
                 Status
               </th>
-              <th className="w-48 shrink-0 px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-400">
-                Date
+              <th className="w-44 shrink-0 px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-400">
+                Timeline
               </th>
               <th className="w-[120px] shrink-0 px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-400">
                 Actions

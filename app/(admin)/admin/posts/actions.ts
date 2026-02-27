@@ -69,13 +69,15 @@ export type PostRow = {
   display_options: Record<string, unknown>;
   /** First N category names for list display (from post_categories join). */
   category_names?: string[];
+  /** First N tag names for list display (from post_tags join). */
+  tag_names?: string[];
 }
 
 export async function getPosts(): Promise<PostRow[]> {
   const client = await createClient();
   const { data, error } = await client
     .from("posts")
-    .select("id, title, slug, excerpt, content, main_image, status, created_at, updated_at, published_at, post_categories(categories(name))")
+    .select("id, title, slug, excerpt, content, main_image, status, created_at, updated_at, published_at, post_categories(categories(name)), post_tags(tags(name))")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -83,17 +85,23 @@ export async function getPosts(): Promise<PostRow[]> {
     return [];
   }
   return (data ?? []).map((row: Record<string, unknown>) => {
-    const { content, main_image, post_categories, ...rest } = row;
+    const { content, main_image, post_categories, post_tags, ...rest } = row;
     const pcList = Array.isArray(post_categories) ? post_categories : [];
     const category_names = pcList
       .map((pc: { categories?: { name?: string } | null }) => pc?.categories?.name)
       .filter((n): n is string => typeof n === "string" && n.length > 0)
-      .slice(0, 2);
+      .slice(0, 3);
+    const ptList = Array.isArray(post_tags) ? post_tags : [];
+    const tag_names = ptList
+      .map((pt: { tags?: { name?: string } | null }) => pt?.tags?.name)
+      .filter((n): n is string => typeof n === "string" && n.length > 0)
+      .slice(0, 3);
     return {
       ...rest,
       body: content != null ? String(content) : null,
       featured_image: main_image != null ? String(main_image) : null,
       category_names,
+      tag_names,
     } as PostRow;
   });
 }

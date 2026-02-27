@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { format } from "date-fns";
+import { Pencil } from "lucide-react";
+import { format, differenceInHours, formatDistanceToNow } from "date-fns";
 import type { PostRow } from "./actions";
 import { deletePost } from "./actions";
 
@@ -34,7 +35,7 @@ export function PostsTable({ posts }: { posts: PostRow[] }) {
   if (posts.length === 0) {
     return (
       <tr>
-        <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
+        <td colSpan={4} className="px-4 py-8 text-center text-gray-400">
           No posts yet.{" "}
           <Link href="/admin/posts/new" className="text-hot-white hover:underline">
             Add one
@@ -52,7 +53,7 @@ export function PostsTable({ posts }: { posts: PostRow[] }) {
           key={post.id}
           className="border-b border-white/5 transition-colors hover:bg-white/5"
         >
-          <td className="min-w-0 px-4 py-3">
+          <td className="w-full max-w-0 px-4 py-3 align-top">
             <Link
               href={`/admin/posts/${post.id}`}
               className="block truncate font-medium text-hot-white hover:underline"
@@ -60,13 +61,18 @@ export function PostsTable({ posts }: { posts: PostRow[] }) {
             >
               {post.title || "Untitled"}
             </Link>
+            <p className="mt-0.5 truncate text-sm text-gray-400">
+              {(() => {
+                const cats = (post.category_names ?? []).join(", ");
+                const tags = (post.tag_names ?? []).join(", ");
+                if (cats && tags) return `${cats} | ${tags}`;
+                if (cats) return cats;
+                if (tags) return tags;
+                return "—";
+              })()}
+            </p>
           </td>
-          <td className="w-40 shrink-0 px-4 py-3 text-sm text-gray-400">
-            {(post.category_names ?? []).length > 0
-              ? (post.category_names ?? []).slice(0, 2).join(", ")
-              : "—"}
-          </td>
-          <td className="w-32 shrink-0 px-4 py-3 text-right">
+          <td className="w-28 shrink-0 px-4 py-3 text-right align-top">
             <span
               className={
                 post.status === "published" &&
@@ -87,12 +93,22 @@ export function PostsTable({ posts }: { posts: PostRow[] }) {
                   : "Draft"}
             </span>
           </td>
-          <td className="w-48 shrink-0 px-4 py-3 text-right text-gray-400">
-            {post.created_at
-              ? format(new Date(post.created_at), "MMM d, yyyy • HH:mm")
-              : "—"}
+          <td className="w-44 shrink-0 px-4 py-3 align-top text-right">
+            <div className="text-gray-400">
+              {(post.published_at ?? post.created_at)
+                ? format(new Date((post.published_at ?? post.created_at) as string), "MMM d, yy • HH:mm")
+                : "—"}
+            </div>
+            {post.updated_at && (
+              <p className="mt-0.5 inline-flex items-center gap-1 text-sm text-gray-500">
+                <Pencil className="h-3 w-3 shrink-0" />
+                {differenceInHours(new Date(), new Date(post.updated_at)) < 48
+                  ? formatDistanceToNow(new Date(post.updated_at), { addSuffix: true })
+                  : format(new Date(post.updated_at), "MMM d, yy • HH:mm")}
+              </p>
+            )}
           </td>
-          <td className="w-[120px] shrink-0 px-4 py-3 text-right">
+          <td className="w-[120px] shrink-0 px-4 py-3 text-right align-top">
             <PostRowActions id={post.id} />
           </td>
         </tr>
