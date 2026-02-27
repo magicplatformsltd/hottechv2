@@ -75,6 +75,30 @@ export function HeroEditor({ block, onChange }: HeroEditorProps) {
         </div>
         <div>
           <label className="block font-sans text-sm font-medium text-gray-400">
+            Newsletter Description
+          </label>
+          <input
+            type="text"
+            value={data.newsletterDescription ?? ""}
+            onChange={(e) => update("newsletterDescription", e.target.value)}
+            placeholder="Brief message above the email field"
+            className="mt-1 w-full rounded-md border border-white/10 bg-hot-gray px-3 py-2 font-sans text-hot-white placeholder-gray-500 focus:border-hot-white/30 focus:outline-none focus:ring-1 focus:ring-hot-white/20"
+          />
+        </div>
+        <div>
+          <label className="block font-sans text-sm font-medium text-gray-400">
+            Button Text
+          </label>
+          <input
+            type="text"
+            value={data.newsletterButtonText ?? ""}
+            onChange={(e) => update("newsletterButtonText", e.target.value)}
+            placeholder="Join"
+            className="mt-1 w-full rounded-md border border-white/10 bg-hot-gray px-3 py-2 font-sans text-hot-white placeholder-gray-500 focus:border-hot-white/30 focus:outline-none focus:ring-1 focus:ring-hot-white/20"
+          />
+        </div>
+        <div>
+          <label className="block font-sans text-sm font-medium text-gray-400">
             Shape
           </label>
           <div className="mt-2 flex gap-4">

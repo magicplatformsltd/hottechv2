@@ -51,7 +51,11 @@ export function Hero({ data }: HeroProps) {
             {description}
           </motion.p>
           <div className="mt-8 p-8">
-            <NewsletterForm source="homepage_cta" />
+            <NewsletterForm
+              source="homepage_cta"
+              description={data?.newsletterDescription?.trim() || undefined}
+              buttonText={data?.newsletterButtonText?.trim() || "Join"}
+            />
           </div>
         </div>
 

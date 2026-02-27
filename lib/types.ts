@@ -15,6 +15,8 @@ export interface HeroBlockData {
   description?: string;
   headshot_url?: string;
   shape?: "circle" | "square";
+  newsletterDescription?: string;
+  newsletterButtonText?: string;
 }
 
 /** Feature grid block data (stored in block.data). */
