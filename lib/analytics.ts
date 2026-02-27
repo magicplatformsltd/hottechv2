@@ -1,12 +1,14 @@
 "use server";
 
 import { createClient } from "@/utils/supabase/server";
-import { format, subDays, eachDayOfInterval } from "date-fns";
+import { format, eachDayOfInterval, startOfDay, endOfDay, parseISO } from "date-fns";
 
 export type ChartDataPoint = {
   date: string;
-  subscribers: number;
-  opens: number;
+  newSubscribers: number;
+  newsletterOpens: number;
+  pageviews: number;
+  newPosts: number;
 };
 
 export type TopPostRow = {
@@ -26,17 +28,21 @@ export type TopNewsletterRow = {
 };
 
 /**
- * Chart data: subscribers and newsletter opens per day over the last `days`.
+ * Chart data: new subscribers, newsletter opens, pageviews, and new posts per day
+ * within the provided date range.
  */
-export async function getChartData(days: number = 30): Promise<ChartDataPoint[]> {
-  const end = new Date();
-  const start = subDays(end, days);
+export async function getChartData(
+  startDate: Date,
+  endDate: Date
+): Promise<ChartDataPoint[]> {
+  const start = startOfDay(startDate);
+  const end = endOfDay(endDate);
   const startIso = start.toISOString();
   const endIso = end.toISOString();
 
   const supabase = await createClient();
 
-  const [subsRes, opensRes] = await Promise.all([
+  const [subsRes, opensRes, pageviewsRes, postsRes] = await Promise.all([
     supabase
       .from("subscribers")
       .select("created_at")
@@ -48,37 +54,82 @@ export async function getChartData(days: number = 30): Promise<ChartDataPoint[]>
       .eq("type", "OPEN")
       .gte("created_at", startIso)
       .lte("created_at", endIso),
+    supabase
+      .from("post_analytics")
+      .select("created_at")
+      .gte("created_at", startIso)
+      .lte("created_at", endIso),
+    supabase
+      .from("posts")
+      .select("published_at")
+      .eq("status", "published")
+      .gte("published_at", startIso)
+      .lte("published_at", endIso),
   ]);
 
   const subsByDay: Record<string, number> = {};
   const opensByDay: Record<string, number> = {};
+  const pageviewsByDay: Record<string, number> = {};
+  const newPostsByDay: Record<string, number> = {};
 
   const dayKeys = eachDayOfInterval({ start, end }).map((d) => {
     const k = format(d, "yyyy-MM-dd");
     subsByDay[k] = 0;
     opensByDay[k] = 0;
+    pageviewsByDay[k] = 0;
+    newPostsByDay[k] = 0;
     return k;
   });
+
+  /** Bucket ISO timestamp into local-date key (yyyy-MM-dd). Parses as Date and formats
+   *  in local timezone so days don't shift from UTC bleed-through. */
+  function toLocalDateKey(iso: string): string {
+    const d = parseISO(iso);
+    return format(d, "yyyy-MM-dd");
+  }
+
+  /** Format a date key (yyyy-MM-dd) to display string (MMM d) without timezone shift.
+   *  Parse as local date parts so "2025-02-27" always shows "Feb 27" regardless of server TZ. */
+  function formatDateKey(k: string): string {
+    const [y, m, day] = k.split("-").map(Number);
+    return format(new Date(y!, m! - 1, day!), "MMM d");
+  }
 
   for (const row of subsRes.data ?? []) {
     const at = (row as { created_at?: string }).created_at;
     if (at) {
-      const k = format(new Date(at), "yyyy-MM-dd");
+      const k = toLocalDateKey(at);
       if (k in subsByDay) subsByDay[k] += 1;
     }
   }
   for (const row of opensRes.data ?? []) {
     const at = (row as { created_at?: string }).created_at;
     if (at) {
-      const k = format(new Date(at), "yyyy-MM-dd");
+      const k = toLocalDateKey(at);
       if (k in opensByDay) opensByDay[k] += 1;
+    }
+  }
+  for (const row of pageviewsRes.data ?? []) {
+    const at = (row as { created_at?: string }).created_at;
+    if (at) {
+      const k = toLocalDateKey(at);
+      if (k in pageviewsByDay) pageviewsByDay[k] += 1;
+    }
+  }
+  for (const row of postsRes.data ?? []) {
+    const at = (row as { published_at?: string }).published_at;
+    if (at) {
+      const k = toLocalDateKey(at);
+      if (k in newPostsByDay) newPostsByDay[k] += 1;
     }
   }
 
   return dayKeys.map((k) => ({
-    date: format(new Date(k), "MMM d"),
-    subscribers: subsByDay[k] ?? 0,
-    opens: opensByDay[k] ?? 0,
+    date: formatDateKey(k),
+    newSubscribers: subsByDay[k] ?? 0,
+    newsletterOpens: opensByDay[k] ?? 0,
+    pageviews: pageviewsByDay[k] ?? 0,
+    newPosts: newPostsByDay[k] ?? 0,
   }));
 }
 
@@ -90,16 +141,24 @@ type ContentAgg = {
 };
 
 /**
- * Top 20 content items by total views (post_analytics: posts + homepage).
+ * Top 20 content items by total views (post_analytics: posts + homepage)
+ * within the provided date range.
  * Homepage: rows with path === '/' or !post_id, keyed as 'homepage'.
  * Posts: keyed by post_id, title/slug from joined posts.
  */
-export async function getTopPosts(): Promise<TopPostRow[]> {
+export async function getTopPosts(
+  startDate: Date,
+  endDate: Date
+): Promise<TopPostRow[]> {
   const supabase = await createClient();
+  const startIso = startDate.toISOString();
+  const endIso = endDate.toISOString();
 
   const { data: rows, error } = await supabase
     .from("post_analytics")
-    .select("post_id, visitor_id, path, posts(title, slug)");
+    .select("post_id, visitor_id, path, posts(title, slug)")
+    .gte("created_at", startIso)
+    .lte("created_at", endIso);
 
   if (error) {
     console.error("[getTopPosts]", error);
@@ -151,15 +210,23 @@ export async function getTopPosts(): Promise<TopPostRow[]> {
 }
 
 /**
- * Top 20 sent newsletters by total opens (newsletters + newsletter_events).
+ * Top 20 sent newsletters by total opens (newsletters + newsletter_events)
+ * within the provided date range.
  */
-export async function getTopNewsletters(): Promise<TopNewsletterRow[]> {
+export async function getTopNewsletters(
+  startDate: Date,
+  endDate: Date
+): Promise<TopNewsletterRow[]> {
   const supabase = await createClient();
+  const startIso = startDate.toISOString();
+  const endIso = endDate.toISOString();
 
   const { data: rows, error } = await supabase
     .from("newsletter_events")
     .select("newsletter_id, recipient_id")
-    .eq("type", "OPEN");
+    .eq("type", "OPEN")
+    .gte("created_at", startIso)
+    .lte("created_at", endIso);
 
   if (error) {
     console.error("[getTopNewsletters]", error);

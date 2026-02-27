@@ -10,7 +10,7 @@ export function SyncButton() {
     if (syncing) return;
     setSyncing(true);
     try {
-      const res = await fetch("/api/ingest");
+      const res = await fetch("/api/ingest", { credentials: "include" });
       const data = await res.json();
       if (!res.ok) {
         alert("Sync Failed");

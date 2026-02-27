@@ -19,6 +19,8 @@ function normalizeName(s: string | undefined | null): string {
 const AUTHORY_FEED_URL = "https://authory.com/hot/rss?count=100";
 const PLACEHOLDER_IMAGE = "https://placehold.co/600x400/1a1a1a/FFF";
 
+const ALLOWED_ADMIN_EMAILS = ["web@nirave.co"];
+
 type AuthoryRssItem = Parser.Item & {
   source?: string;
   mediaContent?: unknown;
@@ -168,15 +170,13 @@ export async function GET() {
   const headersList = await headers();
   const isCron = headersList.get("x-vercel-cron") === "1";
 
-  // Allow manual syncing from Admin panel when user has admin role
+  // Allow manual syncing from Admin panel when user's email is in the allowed list
   let isAdmin = false;
   if (!isCron) {
     const supabaseAuth = await createServerClient();
     const { data: { user } } = await supabaseAuth.auth.getUser();
-    isAdmin =
-      !!user &&
-      ((user.app_metadata as { role?: string } | undefined)?.role === "admin" ||
-        (user.user_metadata as { role?: string } | undefined)?.role === "admin");
+    const email = user?.email?.toLowerCase().trim();
+    isAdmin = !!user && !!email && ALLOWED_ADMIN_EMAILS.includes(email);
   }
 
   if (!isCron && !isAdmin) {
