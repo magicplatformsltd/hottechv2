@@ -168,7 +168,8 @@ Match the article to the best category and optional tags/content type. Use EXACT
 
 export async function GET() {
   const headersList = await headers();
-  const isCron = headersList.get("x-vercel-cron") === "1";
+  const authHeader = headersList.get("authorization");
+  const isCron = authHeader === `Bearer ${process.env.CRON_SECRET}`;
 
   // Allow manual syncing from Admin panel when user's email is in the allowed list
   let isAdmin = false;

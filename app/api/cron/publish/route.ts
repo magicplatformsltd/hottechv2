@@ -9,7 +9,8 @@ import { createClient } from "@/utils/supabase/server";
  */
 export async function GET() {
   const headersList = await headers();
-  const isCron = headersList.get("x-vercel-cron") === "1";
+  const authHeader = headersList.get("authorization");
+  const isCron = authHeader === `Bearer ${process.env.CRON_SECRET}`;
 
   if (!isCron) {
     return new Response("Unauthorized", { status: 401 });
