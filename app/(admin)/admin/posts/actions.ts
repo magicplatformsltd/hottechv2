@@ -67,6 +67,8 @@ export type PostRow = {
   showcase_data: unknown[];
   /** Display options (e.g. hide_header for landing page). */
   display_options: Record<string, unknown>;
+  /** Primary category for SEO and display when post has multiple categories. */
+  primary_category_id: number | null;
   /** First N category names for list display (from post_categories join). */
   category_names?: string[];
   /** First N tag names for list display (from post_tags join). */
@@ -77,7 +79,7 @@ export async function getPosts(): Promise<PostRow[]> {
   const client = await createClient();
   const { data, error } = await client
     .from("posts")
-    .select("id, title, slug, excerpt, content, main_image, status, created_at, updated_at, published_at, post_categories(categories(name)), post_tags(tags(name))")
+    .select("id, title, slug, excerpt, content, main_image, status, created_at, updated_at, published_at, source_name, post_categories(categories(name)), post_tags(tags(name))")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -110,7 +112,7 @@ export async function getPostById(id: string): Promise<PostRow | null> {
   const client = await createClient();
   const { data, error } = await client
     .from("posts")
-    .select("id, title, slug, excerpt, content, main_image, status, created_at, updated_at, published_at, source_name, original_url, meta_title, meta_description, canonical_url, showcase_data, display_options, draft_title, draft_summary, draft_content, draft_hero_image")
+    .select("id, title, slug, excerpt, content, main_image, status, created_at, updated_at, published_at, source_name, original_url, meta_title, meta_description, canonical_url, showcase_data, display_options, draft_title, draft_summary, draft_content, draft_hero_image, primary_category_id")
     .eq("id", id)
     .maybeSingle();
 
@@ -224,6 +226,12 @@ export async function createPost(formData: FormData): Promise<{ id?: string; err
       ? parseInt(String(contentTypeIdRaw), 10)
       : null;
   const contentTypeIdValid = contentTypeId != null && !Number.isNaN(contentTypeId) ? contentTypeId : null;
+  const primaryCategoryIdRaw = formData.get("primary_category_id");
+  const primaryCategoryId =
+    primaryCategoryIdRaw != null && String(primaryCategoryIdRaw).trim() !== ""
+      ? parseInt(String(primaryCategoryIdRaw), 10)
+      : null;
+  const primaryCategoryIdValid = primaryCategoryId != null && !Number.isNaN(primaryCategoryId) ? primaryCategoryId : null;
   const showcaseDataRaw = formData.get("showcase_data");
   const showcaseData =
     showcaseDataRaw != null && String(showcaseDataRaw).trim() !== ""
@@ -265,6 +273,7 @@ export async function createPost(formData: FormData): Promise<{ id?: string; err
       canonical_url,
       showcase_data: showcaseData,
       display_options: displayOptions,
+      primary_category_id: primaryCategoryIdValid,
       user_id: user.id,
     })
     .select("id")
@@ -322,6 +331,12 @@ export async function updatePost(
       ? parseInt(String(contentTypeIdRaw), 10)
       : null;
   const contentTypeIdValid = contentTypeId != null && !Number.isNaN(contentTypeId) ? contentTypeId : null;
+  const primaryCategoryIdRaw = formData.get("primary_category_id");
+  const primaryCategoryId =
+    primaryCategoryIdRaw != null && String(primaryCategoryIdRaw).trim() !== ""
+      ? parseInt(String(primaryCategoryIdRaw), 10)
+      : null;
+  const primaryCategoryIdValid = primaryCategoryId != null && !Number.isNaN(primaryCategoryId) ? primaryCategoryId : null;
 
   const showcaseDataRaw = formData.get("showcase_data");
   let showcaseData: unknown[] = [];
@@ -359,6 +374,7 @@ export async function updatePost(
     canonical_url,
     showcase_data: showcaseData,
     display_options: displayOptions,
+    primary_category_id: primaryCategoryIdValid,
   };
   if (published_at) {
     try {

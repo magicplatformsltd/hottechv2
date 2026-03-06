@@ -113,6 +113,10 @@ export function EditPostForm({
   const [selectedCategoryIds, setSelectedCategoryIds] = useState<Set<number>>(
     () => new Set(initialCategoryIds)
   );
+  const [primaryCategoryId, setPrimaryCategoryId] = useState<number | null>(() => {
+    const v = post?.primary_category_id;
+    return v != null && typeof v === "number" ? v : null;
+  });
   const [selectedTags, setSelectedTags] = useState<SelectedTag[]>(() =>
     initialTagIds.map((id) => {
       const t = tags.find((x) => x.id === id);
@@ -224,6 +228,12 @@ export function EditPostForm({
     return () => clearTimeout(t);
   }, [successMessage]);
 
+  useEffect(() => {
+    if (primaryCategoryId != null && !selectedCategoryIds.has(primaryCategoryId)) {
+      setPrimaryCategoryId(null);
+    }
+  }, [selectedCategoryIds, primaryCategoryId]);
+
   async function buildPostFormData(): Promise<FormData | null> {
     const newTags = selectedTags.filter((t) => t.isNew);
     const existingTagIds = selectedTags.filter((t) => !t.isNew).map((t) => t.id);
@@ -259,6 +269,7 @@ export function EditPostForm({
     selectedCategoryIds.forEach((id) => formData.append("category_ids", String(id)));
     finalTagIds.forEach((id) => formData.append("tag_ids", String(id)));
     if (selectedContentTypeId != null) formData.set("content_type_id", String(selectedContentTypeId));
+    formData.set("primary_category_id", primaryCategoryId != null ? String(primaryCategoryId) : "");
     formData.set("showcase_data", JSON.stringify(showcaseData));
     formData.set("display_options", JSON.stringify(displayOptions));
     return formData;
@@ -478,7 +489,7 @@ export function EditPostForm({
         </SidebarSection>
 
         <SidebarSection title="Categories" defaultOpen={true}>
-          <div className="max-h-48 space-y-1 overflow-y-auto">
+          <div className="max-h-[450px] space-y-1 overflow-y-auto pr-2">
             {categoryRows.length === 0 ? (
               <p className="text-xs text-gray-500">No categories defined.</p>
             ) : (
@@ -500,6 +511,34 @@ export function EditPostForm({
               ))
             )}
           </div>
+        </SidebarSection>
+
+        <SidebarSection title="Primary Category" defaultOpen={true}>
+          <select
+            name="primary_category_id"
+            value={primaryCategoryId ?? ""}
+            onChange={(e) => {
+              const v = e.target.value;
+              setPrimaryCategoryId(v === "" ? null : parseInt(v, 10));
+            }}
+            disabled={selectedCategoryIds.size === 0}
+            className="w-full rounded-md border border-white/10 bg-hot-black px-3 py-2 font-sans text-sm text-hot-white focus:border-hot-white/30 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {selectedCategoryIds.size === 0 ? (
+              <option value="">Select categories first…</option>
+            ) : (
+              <>
+                <option value="">None</option>
+                {categories
+                  .filter((c) => selectedCategoryIds.has(c.id))
+                  .map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.name}
+                    </option>
+                  ))}
+              </>
+            )}
+          </select>
         </SidebarSection>
 
         <SidebarSection title="Tags" defaultOpen={true}>

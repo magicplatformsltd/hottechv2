@@ -61,7 +61,12 @@ export function PostsTable({ posts }: { posts: PostRow[] }) {
             >
               {post.title || "Untitled"}
             </Link>
-            <p className="mt-0.5 truncate text-sm text-gray-400">
+            <p className="mt-0.5 flex flex-wrap items-center gap-x-2 truncate text-sm text-gray-400">
+              {post.source_name?.trim() && (
+                <span className="mr-2 inline-flex items-center rounded bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                  {post.source_name.trim()}
+                </span>
+              )}
               {(() => {
                 const cats = (post.category_names ?? []).join(", ");
                 const tags = (post.tag_names ?? []).join(", ");
