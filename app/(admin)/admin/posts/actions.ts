@@ -308,6 +308,12 @@ export async function updatePost(
   const body = formData.get("body") as string;
   const featured_image = (formData.get("featured_image") as string) || null;
   const published_at = (formData.get("published_at") as string)?.trim() || null;
+  const slug = (formData.get("slug") as string)?.trim() || null;
+  const source_name = (formData.get("source_name") as string)?.trim() || null;
+  const original_url = (formData.get("original_url") as string)?.trim() || null;
+  const meta_title = (formData.get("meta_title") as string)?.trim() || null;
+  const meta_description = (formData.get("meta_description") as string)?.trim() || null;
+  const canonical_url = (formData.get("canonical_url") as string)?.trim() || null;
   const categoryIds = (formData.getAll("category_ids") as string[]).map((s) => parseInt(s, 10)).filter((n) => !Number.isNaN(n));
   const tagIds = (formData.getAll("tag_ids") as string[]).map((s) => parseInt(s, 10)).filter((n) => !Number.isNaN(n));
   const contentTypeIdRaw = formData.get("content_type_id");
@@ -317,12 +323,42 @@ export async function updatePost(
       : null;
   const contentTypeIdValid = contentTypeId != null && !Number.isNaN(contentTypeId) ? contentTypeId : null;
 
+  const showcaseDataRaw = formData.get("showcase_data");
+  let showcaseData: unknown[] = [];
+  if (showcaseDataRaw != null && String(showcaseDataRaw).trim() !== "") {
+    try {
+      const parsed = JSON.parse(String(showcaseDataRaw));
+      showcaseData = Array.isArray(parsed) ? parsed : [];
+    } catch {
+      // keep default [] on parse error
+    }
+  }
+
+  const displayOptionsRaw = formData.get("display_options");
+  let displayOptions: Record<string, unknown> = {};
+  if (displayOptionsRaw != null && String(displayOptionsRaw).trim() !== "") {
+    try {
+      const parsed = JSON.parse(String(displayOptionsRaw));
+      displayOptions = parsed != null && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      // keep default {} on parse error
+    }
+  }
+
   const payload: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
     draft_title: title ?? null,
     draft_summary: excerpt ?? null,
     draft_content: body ?? null,
     draft_hero_image: featured_image ?? null,
+    slug,
+    source_name,
+    original_url,
+    meta_title,
+    meta_description,
+    canonical_url,
+    showcase_data: showcaseData,
+    display_options: displayOptions,
   };
   if (published_at) {
     try {
