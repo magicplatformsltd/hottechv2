@@ -13,24 +13,24 @@ export function PullQuoteBlock({ data }: PullQuoteBlockProps) {
   const isCenter = alignment === "full";
   const floatClass =
     isCenter
-      ? "w-full text-center mb-10"
+      ? "w-full text-center mb-10 [&_p]:m-0 [&_div]:m-0 [&_blockquote]:m-0"
       : alignment === "right"
-        ? "float-right w-full md:w-[33%] ml-0 md:ml-8 mt-0 mb-4"
-        : "float-left w-full md:w-[33%] mr-0 md:mr-8 mt-0 mb-4";
+        ? "float-right w-full md:w-[33%] ml-0 md:ml-8 mt-0 mb-4 [&_p]:m-0 [&_div]:m-0 [&_blockquote]:m-0"
+        : "float-left w-full md:w-[33%] mr-0 md:mr-8 mt-0 mb-4 [&_p]:m-0 [&_div]:m-0 [&_blockquote]:m-0";
 
   const quoteClass =
     isCenter
-      ? "font-serif text-2xl md:text-3xl text-hot-white/95 text-center"
-      : "font-serif text-xl md:text-2xl text-hot-white/95 leading-relaxed";
+      ? "font-serif text-2xl md:text-3xl text-hot-white/95 text-center leading-snug"
+      : "font-serif text-xl md:text-2xl text-hot-white/95 leading-snug";
 
   return (
     <div className="mt-8 clear-both">
-      <div className={floatClass}>
+      <div className={`gap-y-0 ${floatClass}`}>
         <blockquote className={quoteClass}>
         &ldquo;{quoteText.trim()}&rdquo;
       </blockquote>
       {attribution?.trim() && (
-        <footer className={`mt-2 font-sans text-sm text-gray-400 ${isCenter ? "text-center" : ""}`}>
+        <footer className={`mt-3 font-sans text-sm text-gray-400 ${isCenter ? "text-center" : ""}`}>
           — {attribution.trim()}
         </footer>
       )}

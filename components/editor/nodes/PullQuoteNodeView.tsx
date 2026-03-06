@@ -78,7 +78,7 @@ export function PullQuoteNodeView({ node, getPos, editor }: NodeViewProps) {
         ref={containerRef}
         onFocusCapture={() => setIsFocused(true)}
         onBlurCapture={handleBlur}
-        className={`rounded-lg border border-white/10 bg-white/5 p-4 transition-all duration-200 ${isFloated ? "mt-0 mb-4 " : "mb-10 "}${layoutClass}`}
+        className={`rounded-lg border border-white/10 bg-white/5 p-4 transition-all duration-200 gap-y-0 [&_blockquote]:m-0 [&_blockquote_p]:m-0 ${isFloated ? "mt-0 mb-4 " : "mb-10 "}${layoutClass}`}
       >
         <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-white/10 pb-2">
           <span className="font-sans text-xs text-gray-500">Pull Quote</span>
@@ -110,7 +110,7 @@ export function PullQuoteNodeView({ node, getPos, editor }: NodeViewProps) {
           </div>
         </div>
         <blockquote
-          className={`font-serif text-xl text-hot-white/95 ${isCenter ? "text-center" : "leading-relaxed"}`}
+          className={`font-serif text-xl text-hot-white/95 leading-snug m-0 ${isCenter ? "text-center" : ""}`}
         >
           <textarea
             value={quoteText}
@@ -119,11 +119,11 @@ export function PullQuoteNodeView({ node, getPos, editor }: NodeViewProps) {
               updateNode({ quoteText: e.target.value });
             }}
             placeholder="Quote text…"
-            className={`w-full resize-y border-0 bg-transparent font-serif text-xl text-hot-white placeholder-gray-500 focus:ring-0 ${isCenter ? "text-center" : ""}`}
+            className={`w-full resize-y border-0 bg-transparent font-serif text-xl text-hot-white placeholder-gray-500 focus:ring-0 leading-snug ${isCenter ? "text-center" : ""}`}
             rows={3}
           />
         </blockquote>
-        <footer className={`mt-2 font-sans text-sm text-gray-400 ${isCenter ? "text-center" : ""}`}>
+        <footer className={`mt-3 font-sans text-sm text-gray-400 m-0 ${isCenter ? "text-center" : ""}`}>
           <input
             type="text"
             value={attribution}
