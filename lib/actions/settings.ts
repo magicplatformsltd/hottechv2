@@ -250,7 +250,7 @@ export async function syncFeaturedPostMetadata(): Promise<{
 
   const uniqueIds = [...new Set(postIds)];
   if (uniqueIds.length === 0) {
-    revalidateTag("site-settings");
+    revalidateTag("site-settings", "page");
     revalidatePath("/");
     return { postImages: {} };
   }
@@ -270,7 +270,7 @@ export async function syncFeaturedPostMetadata(): Promise<{
     postImages[p.id] = url;
   }
 
-  revalidateTag("site-settings");
+  revalidateTag("site-settings", "page");
   revalidatePath("/");
   return { postImages };
 }
