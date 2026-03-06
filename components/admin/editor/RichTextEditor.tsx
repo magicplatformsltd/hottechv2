@@ -27,8 +27,6 @@ import {
   FileText,
   Share2,
   Handshake,
-  Images,
-  SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MediaPickerModal } from "@/app/components/admin/media/MediaPickerModal";
@@ -141,6 +139,32 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
     (url: string, alt?: string) => {
       if (editor && url) {
         editor.chain().focus().setImage({ src: url, alt: alt ?? "" }).run();
+      }
+      setImagePickerOpen(false);
+    },
+    [editor]
+  );
+
+  const handleMediaInsert = useCallback(
+    (params: { mode: "single" | "grid" | "masonry" | "slideshow" | "comparison"; items: { id: string; url: string; alt_text?: string | null }[] }) => {
+      if (!editor) return;
+      const { mode, items } = params;
+      if (mode === "single" && items[0]) {
+        editor.chain().focus().setImage({ src: items[0].url, alt: items[0].alt_text ?? "" }).run();
+      } else if ((mode === "grid" || mode === "masonry" || mode === "slideshow") && items.length >= 1) {
+        const galleryItems = items.map((i, idx) => ({
+          id: i.id || `img-${Date.now()}-${idx}`,
+          url: i.url,
+          alt: i.alt_text ?? undefined,
+        }));
+        editor.chain().focus().setImageGallery({ layout: mode, images: galleryItems }).run();
+      } else if (mode === "comparison" && items.length >= 2) {
+        editor.chain().focus().setImageComparison({
+          beforeUrl: items[0].url,
+          afterUrl: items[1].url,
+          beforeLabel: items[0].alt_text ?? undefined,
+          afterLabel: items[1].alt_text ?? undefined,
+        }).run();
       }
       setImagePickerOpen(false);
     },
@@ -325,20 +349,6 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         <ToolbarButton onClick={openSponsorModalForInsert} title="Sponsor block">
           <Handshake className="h-4 w-4" />
         </ToolbarButton>
-        <ToolbarButton
-          onClick={() => editor.chain().focus().setImageGallery({ layout: "grid", images: [] }).run()}
-          title="Image gallery"
-        >
-          <Images className="h-4 w-4" />
-        </ToolbarButton>
-        <ToolbarButton
-          onClick={() =>
-            editor.chain().focus().setImageComparison({ beforeUrl: "", afterUrl: "", beforeLabel: "", afterLabel: "" }).run()
-          }
-          title="Before/After comparison"
-        >
-          <SlidersHorizontal className="h-4 w-4" />
-        </ToolbarButton>
       </div>
       <EditorContent
         editor={editor}
@@ -349,6 +359,17 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         isOpen={imagePickerOpen}
         onClose={() => setImagePickerOpen(false)}
         onSelect={handleImageSelect}
+        context="editor"
+        onInsert={(params) =>
+          handleMediaInsert({
+            mode: params.mode,
+            items: params.items.map((i) => ({
+              id: i.id,
+              url: i.url,
+              alt_text: i.alt_text ?? undefined,
+            })),
+          })
+        }
       />
       <PostPickerModal
         isOpen={postPickerOpen}
