@@ -1,33 +1,116 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { ClearCacheButton } from "@/app/components/admin/ClearCacheButton";
 import { SyncButton } from "@/app/components/admin/SyncButton";
 import { signOut } from "./actions";
 import { cn } from "@/lib/utils";
 
-const contentLinks = [
-  { href: "/admin/posts", label: "All Posts" },
-  { href: "/admin/posts/new", label: "Add New" },
-] as const;
+type NavLink = { href: string; label: string };
+type NavGroup = { label: string; children: NavLink[] };
 
-const otherLinks = [
-  { href: "/admin/homepage", label: "Homepage" },
-  { href: "/admin/footer", label: "Footer" },
-  { href: "/admin/menus", label: "Menu Manager" },
-  { href: "/admin/categories", label: "Categories" },
-  { href: "/admin/tags", label: "Tags" },
-  { href: "/admin/content-types", label: "Content Types" },
-  { href: "/admin/newsletters", label: "Newsletters" },
-  { href: "/admin/reporting", label: "Reporting" },
-  { href: "/admin/media", label: "Media" },
-  { href: "/admin/settings", label: "Settings" },
-  { href: "/admin/subscribers", label: "Subscribers" },
-] as const;
+const navGroups: NavGroup[] = [
+  {
+    label: "Content",
+    children: [
+      { href: "/admin/posts", label: "All Posts" },
+      { href: "/admin/posts/new", label: "Add New" },
+      { href: "/admin/categories", label: "Categories" },
+      { href: "/admin/tags", label: "Tags" },
+      { href: "/admin/content-types", label: "Content Types" },
+    ],
+  },
+  {
+    label: "Products & Reviews",
+    children: [
+      { href: "/admin/products", label: "Products" },
+      { href: "/admin/products/new", label: "Add New Product" },
+      { href: "/admin/products/templates", label: "Templates" },
+    ],
+  },
+  {
+    label: "Appearance",
+    children: [
+      { href: "/admin/homepage", label: "Homepage" },
+      { href: "/admin/footer", label: "Footer" },
+      { href: "/admin/menus", label: "Menu Manager" },
+    ],
+  },
+  {
+    label: "Audience",
+    children: [
+      { href: "/admin/subscribers", label: "Subscribers" },
+      { href: "/admin/newsletters", label: "Newsletters" },
+    ],
+  },
+  {
+    label: "System",
+    children: [
+      { href: "/admin/media", label: "Media" },
+      { href: "/admin/reporting", label: "Reporting" },
+      { href: "/admin/settings", label: "Settings" },
+    ],
+  },
+];
+
+function isChildActive(href: string, pathname: string): boolean {
+  if (pathname === href) return true;
+  // Parent-style links (e.g. /admin/posts, /admin/products): active when pathname is a subpath
+  // but not when pathname is another child’s exact path (e.g. /admin/posts/new)
+  if (pathname.startsWith(href + "/")) {
+    const rest = pathname.slice(href.length + 1);
+    // Consider active only if it looks like an id (e.g. uuid) not a known segment
+    if (rest === "new" || rest === "templates" || rest.startsWith("new/") || rest.startsWith("templates/")) {
+      return false;
+    }
+    return true;
+  }
+  return false;
+}
+
+function isGroupOpenForPathname(group: NavGroup, pathname: string): boolean {
+  return group.children.some(
+    (child) => pathname === child.href || pathname.startsWith(child.href + "/")
+  );
+}
+
+function getInitialOpenGroups(pathname: string): Set<string> {
+  const set = new Set<string>();
+  for (const group of navGroups) {
+    if (isGroupOpenForPathname(group, pathname)) {
+      set.add(group.label);
+    }
+  }
+  return set;
+}
 
 export function AdminSidebar({ userEmail }: { userEmail: string }) {
   const pathname = usePathname();
+  const [openGroups, setOpenGroups] = useState<Set<string>>(() =>
+    getInitialOpenGroups(pathname)
+  );
+
+  useEffect(() => {
+    setOpenGroups((prev) => {
+      const forPath = getInitialOpenGroups(pathname);
+      if (forPath.size === 0) return prev;
+      const next = new Set(prev);
+      forPath.forEach((label) => next.add(label));
+      return next;
+    });
+  }, [pathname]);
+
+  const toggleGroup = (label: string) => {
+    setOpenGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  };
 
   return (
     <aside className="flex w-56 flex-col border-r border-white/10 bg-hot-gray">
@@ -39,7 +122,7 @@ export function AdminSidebar({ userEmail }: { userEmail: string }) {
           Hot Tech Admin
         </Link>
       </div>
-      <nav className="flex flex-1 flex-col gap-0.5 p-3">
+      <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto p-3">
         <Link
           href="/admin"
           className={cn(
@@ -51,46 +134,55 @@ export function AdminSidebar({ userEmail }: { userEmail: string }) {
         >
           Dashboard
         </Link>
-        <div className="mt-2">
-          <p className="px-3 py-1 font-sans text-xs font-medium uppercase tracking-wider text-gray-500">
-            Content
-          </p>
-          {contentLinks.map(({ href, label }) => {
-            const isActive =
-              pathname === href ||
-              (href === "/admin/posts" && pathname.startsWith("/admin/posts/") && pathname !== "/admin/posts/new");
-            return (
-              <Link
-                key={href}
-                href={href}
-                className={cn(
-                  "block rounded-md px-3 py-2 font-sans text-sm transition-colors",
-                  isActive
-                    ? "bg-white/10 text-hot-white"
-                    : "text-gray-400 hover:bg-white/5 hover:text-hot-white"
-                )}
+        <Link
+          href="/"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="rounded-md px-3 py-2 font-sans text-sm text-gray-400 transition-colors hover:bg-white/5 hover:text-hot-white"
+        >
+          View Site
+        </Link>
+
+        {navGroups.map((group) => {
+          const isOpen = openGroups.has(group.label);
+          return (
+            <div key={group.label} className="mt-2">
+              <button
+                type="button"
+                onClick={() => toggleGroup(group.label)}
+                className="flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 font-sans text-sm text-gray-400 transition-colors hover:bg-white/5 hover:text-hot-white"
               >
-                {label}
-              </Link>
-            );
-          })}
-        </div>
-        <div className="mt-2">
-          {otherLinks.map(({ href, label }) => (
-            <Link
-              key={href}
-              href={href}
-              className={cn(
-                "block rounded-md px-3 py-2 font-sans text-sm transition-colors",
-                pathname.startsWith(href)
-                  ? "bg-white/10 text-hot-white"
-                  : "text-gray-400 hover:bg-white/5 hover:text-hot-white"
+                <span>{group.label}</span>
+                {isOpen ? (
+                  <ChevronDown className="h-4 w-4 shrink-0" />
+                ) : (
+                  <ChevronRight className="h-4 w-4 shrink-0" />
+                )}
+              </button>
+              {isOpen && (
+                <div className="ml-2 mt-0.5 space-y-0.5 border-l border-white/10 pl-2">
+                  {group.children.map((child) => {
+                    const active = isChildActive(child.href, pathname);
+                    return (
+                      <Link
+                        key={child.href}
+                        href={child.href}
+                        className={cn(
+                          "block rounded-md px-2 py-1.5 font-sans text-sm transition-colors",
+                          active
+                            ? "bg-white/10 text-hot-white"
+                            : "text-gray-400 hover:bg-white/5 hover:text-hot-white"
+                        )}
+                      >
+                        {child.label}
+                      </Link>
+                    );
+                  })}
+                </div>
               )}
-            >
-              {label}
-            </Link>
-          ))}
-        </div>
+            </div>
+          );
+        })}
       </nav>
       <div className="border-t border-white/10 p-3 space-y-2">
         <SyncButton />
