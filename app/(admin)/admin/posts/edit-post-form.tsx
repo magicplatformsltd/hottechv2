@@ -442,6 +442,22 @@ export function EditPostForm({
               />
             </div>
             <div className="flex gap-2">
+              <input
+                type="text"
+                value={slug}
+                onChange={(e) => handleSlugChange(e.target.value)}
+                placeholder="url-slug"
+                className="flex-1 rounded-md border border-white/10 bg-hot-black px-3 py-2 font-sans text-sm text-hot-white placeholder-gray-500 focus:border-hot-white/30 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={handleGenerateSlug}
+                className="shrink-0 rounded-md border border-white/20 px-3 py-2 font-sans text-sm text-hot-white hover:bg-white/10"
+              >
+                Generate
+              </button>
+            </div>
+            <div className="flex gap-2">
               <button
                 type="button"
                 onClick={() => handleSave(true)}
@@ -481,46 +497,6 @@ export function EditPostForm({
               Preview
             </button>
           </div>
-        </SidebarSection>
-
-        <SidebarSection title="Publication Info" defaultOpen={true}>
-          <div className="space-y-2">
-            <div>
-              <label className="block font-sans text-xs text-gray-500">Source</label>
-              <input
-                type="text"
-                value={sourceName}
-                onChange={(e) => setSourceName(e.target.value)}
-                placeholder="e.g. Forbes, Authory"
-                className="mt-1 w-full rounded-md border border-white/10 bg-hot-black px-3 py-2 font-sans text-sm text-hot-white placeholder-gray-500 focus:border-hot-white/30 focus:outline-none"
-              />
-            </div>
-            <div>
-              <label className="block font-sans text-xs text-gray-500">Original URL</label>
-              <input
-                type="url"
-                value={originalUrl}
-                onChange={(e) => setOriginalUrl(e.target.value)}
-                placeholder="https://…"
-                className="mt-1 w-full rounded-md border border-white/10 bg-hot-black px-3 py-2 font-sans text-sm text-hot-white placeholder-gray-500 focus:border-hot-white/30 focus:outline-none"
-              />
-            </div>
-          </div>
-        </SidebarSection>
-
-        <SidebarSection title="Display Settings" defaultOpen={false}>
-          <label className="flex cursor-pointer items-center gap-2 font-sans text-sm">
-            <input
-              type="checkbox"
-              checked={displayOptions.hide_header === true}
-              onChange={(e) => setDisplayOptions((prev) => ({ ...prev, hide_header: e.target.checked }))}
-              className="rounded border-white/20 bg-hot-black text-hot-white focus:ring-0"
-            />
-            <span className="text-hot-white">Hide Header</span>
-          </label>
-          <p className="mt-1.5 font-sans text-xs text-gray-500">
-            Hides title, date, and breadcrumbs for a landing page look.
-          </p>
         </SidebarSection>
 
         <SidebarSection title="Content Type" defaultOpen={true}>
@@ -602,22 +578,35 @@ export function EditPostForm({
           />
         </SidebarSection>
 
-        <SidebarSection title="URL Slug" defaultOpen={false}>
-          <div className="flex gap-2">
-            <input
-              type="text"
-              value={slug}
-              onChange={(e) => handleSlugChange(e.target.value)}
-              placeholder="url-slug"
-              className="flex-1 rounded-md border border-white/10 bg-hot-black px-3 py-2 font-sans text-sm text-hot-white placeholder-gray-500 focus:border-hot-white/30 focus:outline-none"
-            />
-            <button
-              type="button"
-              onClick={handleGenerateSlug}
-              className="shrink-0 rounded-md border border-white/20 px-3 py-2 font-sans text-sm text-hot-white hover:bg-white/10"
-            >
-              Generate
-            </button>
+        <SidebarSection title="Featured Image" defaultOpen={false}>
+          <UniversalImagePicker
+            value={featuredImageUrl}
+            onChange={(url) => setFeaturedImageUrl(url || null)}
+          />
+        </SidebarSection>
+
+        <SidebarSection title="Publication Info" defaultOpen={true}>
+          <div className="space-y-2">
+            <div>
+              <label className="block font-sans text-xs text-gray-500">Source</label>
+              <input
+                type="text"
+                value={sourceName}
+                onChange={(e) => setSourceName(e.target.value)}
+                placeholder="e.g. Forbes, Authory"
+                className="mt-1 w-full rounded-md border border-white/10 bg-hot-black px-3 py-2 font-sans text-sm text-hot-white placeholder-gray-500 focus:border-hot-white/30 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block font-sans text-xs text-gray-500">Original URL</label>
+              <input
+                type="url"
+                value={originalUrl}
+                onChange={(e) => setOriginalUrl(e.target.value)}
+                placeholder="https://…"
+                className="mt-1 w-full rounded-md border border-white/10 bg-hot-black px-3 py-2 font-sans text-sm text-hot-white placeholder-gray-500 focus:border-hot-white/30 focus:outline-none"
+              />
+            </div>
           </div>
         </SidebarSection>
 
@@ -656,11 +645,19 @@ export function EditPostForm({
           </div>
         </SidebarSection>
 
-        <SidebarSection title="Featured Image" defaultOpen={false}>
-          <UniversalImagePicker
-            value={featuredImageUrl}
-            onChange={(url) => setFeaturedImageUrl(url || null)}
-          />
+        <SidebarSection title="Display Settings" defaultOpen={false}>
+          <label className="flex cursor-pointer items-center gap-2 font-sans text-sm">
+            <input
+              type="checkbox"
+              checked={displayOptions.hide_header === true}
+              onChange={(e) => setDisplayOptions((prev) => ({ ...prev, hide_header: e.target.checked }))}
+              className="rounded border-white/20 bg-hot-black text-hot-white focus:ring-0"
+            />
+            <span className="text-hot-white">Hide Header</span>
+          </label>
+          <p className="mt-1.5 font-sans text-xs text-gray-500">
+            Hides title, date, and breadcrumbs for a landing page look.
+          </p>
         </SidebarSection>
       </aside>
     </div>
