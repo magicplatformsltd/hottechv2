@@ -29,3 +29,25 @@ export const DEFAULT_SPONSOR_BLOCK_DATA: SponsorBlockData = {
   alignment: "center",
   grayscale: false,
 };
+
+/** Image gallery block (Grid, Masonry, Slideshow). */
+export type ImageGalleryLayout = "grid" | "masonry" | "slideshow";
+
+export type ImageGalleryItem = {
+  id: string;
+  url: string;
+  alt?: string;
+};
+
+export type ImageGalleryData = {
+  layout: ImageGalleryLayout;
+  images: ImageGalleryItem[];
+};
+
+/** Image comparison block (Before/After slider). */
+export type ImageComparisonData = {
+  beforeUrl: string;
+  afterUrl: string;
+  beforeLabel?: string;
+  afterLabel?: string;
+};

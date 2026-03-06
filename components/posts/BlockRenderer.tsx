@@ -1,11 +1,19 @@
 "use client";
 
-import type { SponsorBlockData } from "@/lib/types/post";
+import type {
+  SponsorBlockData,
+  ImageGalleryData,
+  ImageComparisonData,
+} from "@/lib/types/post";
 import { SponsorBlock } from "@/components/posts/SponsorBlock";
+import { ImageGalleryBlock } from "@/components/posts/ImageGalleryBlock";
+import { ImageComparisonBlock } from "@/components/posts/ImageComparisonBlock";
 
 export type RenderedBlock =
   | { type: "html"; content: string }
-  | { type: "sponsor"; data: SponsorBlockData };
+  | { type: "sponsor"; data: SponsorBlockData }
+  | { type: "imageGallery"; data: ImageGalleryData }
+  | { type: "imageComparison"; data: ImageComparisonData };
 
 type BlockRendererProps = {
   blocks: RenderedBlock[];
@@ -27,6 +35,10 @@ export function BlockRenderer({
         switch (block.type) {
           case "sponsor":
             return <SponsorBlock key={i} data={block.data} />;
+          case "imageGallery":
+            return <ImageGalleryBlock key={i} data={block.data} />;
+          case "imageComparison":
+            return <ImageComparisonBlock key={i} data={block.data} />;
           case "html":
           default:
             return block.content ? (

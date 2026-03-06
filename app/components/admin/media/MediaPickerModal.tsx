@@ -22,6 +22,9 @@ type MediaPickerModalProps = {
   isOpen: boolean;
   onClose: () => void;
   onSelect: (url: string, alt?: string) => void;
+  /** When true, shows checkboxes and "Add selected" button; requires onSelectMultiple */
+  multiSelect?: boolean;
+  onSelectMultiple?: (items: { url: string; alt?: string }[]) => void;
 };
 
 function getSupabase() {
@@ -35,6 +38,8 @@ export function MediaPickerModal({
   isOpen,
   onClose,
   onSelect,
+  multiSelect = false,
+  onSelectMultiple,
 }: MediaPickerModalProps) {
   const [view, setView] = useState<"Upload" | "Library">("Upload");
   const [images, setImages] = useState<MediaItem[]>([]);
@@ -42,8 +47,13 @@ export function MediaPickerModal({
   const [dragActive, setDragActive] = useState(false);
   const [libraryLoading, setLibraryLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 
   const supabase = getSupabase();
+
+  useEffect(() => {
+    if (!isOpen) setSelectedIds(new Set());
+  }, [isOpen]);
 
   const fetchImages = useCallback(async () => {
     setLibraryLoading(true);
@@ -103,7 +113,12 @@ export function MediaPickerModal({
 
         if (insertError) throw insertError;
 
-        handleSelect(url);
+        if (multiSelect && onSelectMultiple) {
+          onSelectMultiple([{ url, alt: file.name }]);
+          onClose();
+        } else {
+          handleSelect(url);
+        }
       } catch (e: unknown) {
         const err = e as { message?: string; details?: string; hint?: string };
         console.error("Upload failed:", err?.message, err?.details, err?.hint);
@@ -112,7 +127,7 @@ export function MediaPickerModal({
         setUploading(false);
       }
     },
-    [supabase, handleSelect]
+    [supabase, handleSelect, multiSelect, onSelectMultiple, onClose]
   );
 
   const onDrop = useCallback(
@@ -137,11 +152,46 @@ export function MediaPickerModal({
 
   const onInputChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
-      const file = e.target.files?.[0];
-      if (file) handleFile(file);
-      e.target.value = "";
+      const files = e.target.files;
+      if (!files?.length) return;
+      if (multiSelect && onSelectMultiple && files.length >= 1) {
+        Promise.all(
+          Array.from(files)
+            .filter((f) => ALLOWED_TYPES.includes(f.type))
+            .map((file) =>
+              imageCompression(file, { maxSizeMB: 1, maxWidthOrHeight: 1920, useWebWorker: true }).then(
+                async (compressed) => {
+                  const ext = file.name.split(".").pop() ?? "jpg";
+                  const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+                  const { error: uploadError } = await supabase.storage.from(BUCKET).upload(path, compressed, {
+                    contentType: compressed.type,
+                    upsert: false,
+                  });
+                  if (uploadError) throw uploadError;
+                  const { data: urlData } = supabase.storage.from(BUCKET).getPublicUrl(path);
+                  await supabase.from("media_items").insert({
+                    filename: file.name,
+                    url: urlData.publicUrl,
+                    mime_type: compressed.type,
+                    size: compressed.size,
+                  });
+                  return { url: urlData.publicUrl, alt: file.name };
+                }
+              )
+            )
+        ).then((items) => {
+          if (items.length) {
+            onSelectMultiple(items);
+            onClose();
+          }
+          e.target.value = "";
+        });
+      } else {
+        handleFile(files[0]);
+        e.target.value = "";
+      }
     },
-    [handleFile]
+    [handleFile, multiSelect, onSelectMultiple, onClose, supabase]
   );
 
   if (!isOpen) return null;
@@ -209,6 +259,7 @@ export function MediaPickerModal({
                 <input
                   type="file"
                   accept={ALLOWED_TYPES.join(",")}
+                  multiple={multiSelect}
                   onChange={onInputChange}
                   className="hidden"
                 />
@@ -236,22 +287,66 @@ export function MediaPickerModal({
                   No images yet. Upload one in the Upload tab.
                 </p>
               ) : (
-                <div className="grid grid-cols-3 gap-3">
-                  {images.map((item) => (
+                <>
+                  <div className="grid grid-cols-3 gap-3">
+                    {images.map((item) => {
+                      const isSelected = multiSelect && selectedIds.has(item.id);
+                      return (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => {
+                            if (multiSelect && onSelectMultiple) {
+                              setSelectedIds((prev) => {
+                                const next = new Set(prev);
+                                if (next.has(item.id)) next.delete(item.id);
+                                else next.add(item.id);
+                                return next;
+                              });
+                            } else {
+                              handleSelect(item.url, item.alt_text ?? undefined);
+                            }
+                          }}
+                          className={`relative aspect-square overflow-hidden rounded-lg border transition ${
+                            isSelected
+                              ? "border-hot-white ring-2 ring-hot-white/50"
+                              : "border-white/10 bg-white/5 hover:border-white/30 hover:bg-white/10"
+                          }`}
+                        >
+                          <img
+                            src={item.url}
+                            alt={item.alt_text ?? item.filename ?? ""}
+                            className="h-full w-full object-cover"
+                          />
+                          {multiSelect && (
+                            <div className="absolute right-2 top-2 flex h-5 w-5 items-center justify-center rounded-full bg-black/60">
+                              {isSelected ? (
+                                <span className="text-xs text-white">✓</span>
+                              ) : (
+                                <span className="h-3 w-3 rounded border border-white/60" />
+                              )}
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {multiSelect && onSelectMultiple && selectedIds.size > 0 && (
                     <button
-                      key={item.id}
                       type="button"
-                      onClick={() => handleSelect(item.url, item.alt_text ?? undefined)}
-                      className="aspect-square overflow-hidden rounded-lg border border-white/10 bg-white/5 transition hover:border-white/30 hover:bg-white/10"
+                      onClick={() => {
+                        const selected = images
+                          .filter((i) => selectedIds.has(i.id))
+                          .map((i) => ({ url: i.url, alt: i.alt_text ?? undefined }));
+                        onSelectMultiple(selected);
+                        onClose();
+                      }}
+                      className="w-full rounded-md bg-hot-white py-2 font-sans text-sm font-medium text-hot-gray transition hover:bg-hot-white/90"
                     >
-                      <img
-                        src={item.url}
-                        alt={item.alt_text ?? item.filename ?? ""}
-                        className="h-full w-full object-cover"
-                      />
+                      Add {selectedIds.size} selected
                     </button>
-                  ))}
-                </div>
+                  )}
+                </>
               )}
             </div>
           )}

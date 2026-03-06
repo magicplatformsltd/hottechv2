@@ -10,6 +10,8 @@ import Placeholder from "@tiptap/extension-placeholder";
 import { PostCard } from "./extensions/PostCard";
 import { SocialCard } from "./extensions/SocialCard";
 import { SponsorBlockExtension, SPONSOR_BLOCK_EDIT_EVENT } from "./extensions/SponsorBlock";
+import { ImageGalleryExtension } from "./extensions/ImageGallery";
+import { ImageComparisonExtension } from "./extensions/ImageComparison";
 import {
   Bold,
   Italic,
@@ -25,6 +27,8 @@ import {
   FileText,
   Share2,
   Handshake,
+  Images,
+  SlidersHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MediaPickerModal } from "@/app/components/admin/media/MediaPickerModal";
@@ -112,6 +116,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
       PostCard,
       SocialCard,
       SponsorBlockExtension,
+      ImageGalleryExtension,
+      ImageComparisonExtension,
       Link.configure({ openOnClick: false, HTMLAttributes: { class: "text-hot-blue underline" } }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       Placeholder.configure({ placeholder }),
@@ -319,10 +325,24 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         <ToolbarButton onClick={openSponsorModalForInsert} title="Sponsor block">
           <Handshake className="h-4 w-4" />
         </ToolbarButton>
+        <ToolbarButton
+          onClick={() => editor.chain().focus().setImageGallery({ layout: "grid", images: [] }).run()}
+          title="Image gallery"
+        >
+          <Images className="h-4 w-4" />
+        </ToolbarButton>
+        <ToolbarButton
+          onClick={() =>
+            editor.chain().focus().setImageComparison({ beforeUrl: "", afterUrl: "", beforeLabel: "", afterLabel: "" }).run()
+          }
+          title="Before/After comparison"
+        >
+          <SlidersHorizontal className="h-4 w-4" />
+        </ToolbarButton>
       </div>
       <EditorContent
         editor={editor}
-        className="prose prose-invert max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_h1]:text-3xl [&_h2]:text-2xl [&_h3]:text-xl [&_.ProseMirror_img]:max-w-full [&_.ProseMirror_img]:h-auto [&_.ProseMirror_img]:rounded-md [&_.content-card]:my-4 [&_.youtube-embed]:my-4 [&_[data-type=sponsor-block]]:my-4"
+        className="prose prose-invert max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_h1]:text-3xl [&_h2]:text-2xl [&_h3]:text-xl [&_.ProseMirror_img]:max-w-full [&_.ProseMirror_img]:h-auto [&_.ProseMirror_img]:rounded-md [&_.content-card]:my-4 [&_.youtube-embed]:my-4 [&_[data-type=sponsor-block]]:my-4 [&_[data-type=image-gallery]]:my-4 [&_[data-type=image-comparison]]:my-4"
       />
 
       <MediaPickerModal
