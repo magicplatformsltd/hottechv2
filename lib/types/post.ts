@@ -51,3 +51,27 @@ export type ImageComparisonData = {
   beforeLabel?: string;
   afterLabel?: string;
 };
+
+/** Pull quote block: quote text + attribution, with alignment. */
+export type PullQuoteAlignment = "left" | "right" | "full";
+
+export type PullQuoteData = {
+  quoteText: string;
+  attribution: string;
+  alignment: PullQuoteAlignment;
+};
+
+export const DEFAULT_PULL_QUOTE_DATA: PullQuoteData = {
+  quoteText: "",
+  attribution: "",
+  alignment: "full",
+};
+
+/** Key Takeaways (TL;DR) block: fixed header + bullet list. */
+export type KeyTakeawaysData = {
+  items: string[];
+};
+
+export const DEFAULT_KEY_TAKEAWAYS_DATA: KeyTakeawaysData = {
+  items: [""],
+};

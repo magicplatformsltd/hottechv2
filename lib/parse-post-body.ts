@@ -2,14 +2,19 @@ import type {
   SponsorBlockData,
   ImageGalleryData,
   ImageComparisonData,
+  PullQuoteData,
+  KeyTakeawaysData,
 } from "@/lib/types/post";
+import { DEFAULT_PULL_QUOTE_DATA } from "@/lib/types/post";
 import { DEFAULT_SPONSOR_BLOCK_DATA } from "@/lib/types/post";
 
 export type PostBodySegment =
   | { type: "html"; content: string }
   | { type: "sponsor"; data: SponsorBlockData }
   | { type: "imageGallery"; data: ImageGalleryData }
-  | { type: "imageComparison"; data: ImageComparisonData };
+  | { type: "imageComparison"; data: ImageComparisonData }
+  | { type: "pullQuote"; data: PullQuoteData }
+  | { type: "keyTakeaways"; data: KeyTakeawaysData };
 
 /** Decode HTML entities in attribute value so JSON.parse works. */
 function decodeAttrValue(s: string): string {
@@ -76,7 +81,9 @@ function extractSponsorBlocks(
 type CustomBlockSegment =
   | { type: "html"; content: string }
   | { type: "imageGallery"; data: ImageGalleryData }
-  | { type: "imageComparison"; data: ImageComparisonData };
+  | { type: "imageComparison"; data: ImageComparisonData }
+  | { type: "pullQuote"; data: PullQuoteData }
+  | { type: "keyTakeaways"; data: KeyTakeawaysData };
 
 /** Extract image-gallery and image-comparison blocks from HTML, preserving order. */
 function extractGalleryAndComparisonBlocks(html: string): CustomBlockSegment[] {
@@ -131,8 +138,76 @@ function extractGalleryAndComparisonBlocks(html: string): CustomBlockSegment[] {
   return result;
 }
 
+type PullQuoteKeyTakeawaysSegment =
+  | { type: "html"; content: string }
+  | { type: "pullQuote"; data: PullQuoteData }
+  | { type: "keyTakeaways"; data: KeyTakeawaysData };
+
+/** Extract pull-quote and key-takeaways blocks from HTML. */
+function extractPullQuoteAndKeyTakeaways(html: string): PullQuoteKeyTakeawaysSegment[] {
+  const blocks: { index: number; type: "pullQuote" | "keyTakeaways"; data: PullQuoteData | KeyTakeawaysData; length: number }[] = [];
+
+  const pullQuoteRegex =
+    /<div\s[^>]*(?:data-type="pull-quote"[^>]*data-pull-quote="((?:[^"\\]|\\.)*)"|data-pull-quote="((?:[^"\\]|\\.)*)"[^>]*data-type="pull-quote")[^>]*>[\s\S]*?<\/div>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = pullQuoteRegex.exec(html)) !== null) {
+    const rawJson = (m[1] ?? m[2] ?? "").replace(/\\"/g, '"');
+    try {
+      const data = JSON.parse(decodeAttrValue(rawJson)) as PullQuoteData;
+      blocks.push({
+        index: m.index,
+        type: "pullQuote",
+        data: { ...DEFAULT_PULL_QUOTE_DATA, ...data },
+        length: m[0].length,
+      });
+    } catch {
+      /* skip invalid */
+    }
+  }
+
+  const keyTakeawaysRegex =
+    /<div\s[^>]*(?:data-type="key-takeaways"[^>]*data-key-takeaways="((?:[^"\\]|\\.)*)"|data-key-takeaways="((?:[^"\\]|\\.)*)"[^>]*data-type="key-takeaways")[^>]*>[\s\S]*?<\/div>/gi;
+  while ((m = keyTakeawaysRegex.exec(html)) !== null) {
+    const rawJson = (m[1] ?? m[2] ?? "").replace(/\\"/g, '"');
+    try {
+      const data = JSON.parse(decodeAttrValue(rawJson)) as KeyTakeawaysData;
+      blocks.push({
+        index: m.index,
+        type: "keyTakeaways",
+        data: { items: Array.isArray(data.items) ? data.items : [""] },
+        length: m[0].length,
+      });
+    } catch {
+      /* skip invalid */
+    }
+  }
+
+  blocks.sort((a, b) => a.index - b.index);
+
+  const result: PullQuoteKeyTakeawaysSegment[] = [];
+  let lastIndex = 0;
+  for (const block of blocks) {
+    if (block.index > lastIndex) {
+      result.push({ type: "html", content: html.slice(lastIndex, block.index) });
+    }
+    result.push(
+      block.type === "pullQuote"
+        ? { type: "pullQuote", data: block.data as PullQuoteData }
+        : { type: "keyTakeaways", data: block.data as KeyTakeawaysData }
+    );
+    lastIndex = block.index + block.length;
+  }
+  if (lastIndex < html.length) {
+    result.push({ type: "html", content: html.slice(lastIndex) });
+  }
+  if (blocks.length === 0) {
+    return [{ type: "html", content: html }];
+  }
+  return result;
+}
+
 /**
- * Parse post body HTML into segments: raw HTML, sponsor, image gallery, and image comparison blocks.
+ * Parse post body HTML into segments: raw HTML, sponsor, image gallery, image comparison, pull quote, key takeaways.
  * Use with BlockRenderer so custom blocks render as their respective React components.
  */
 export function parsePostBody(html: string): PostBodySegment[] {
@@ -142,7 +217,14 @@ export function parsePostBody(html: string): PostBodySegment[] {
     if (seg.type === "sponsor") {
       result.push(seg);
     } else if (seg.type === "html" && seg.content) {
-      result.push(...extractGalleryAndComparisonBlocks(seg.content));
+      const gallerySegments = extractGalleryAndComparisonBlocks(seg.content);
+      for (const g of gallerySegments) {
+        if (g.type === "html" && g.content) {
+          result.push(...extractPullQuoteAndKeyTakeaways(g.content));
+        } else {
+          result.push(g);
+        }
+      }
     } else if (seg.type === "html") {
       result.push(seg);
     }

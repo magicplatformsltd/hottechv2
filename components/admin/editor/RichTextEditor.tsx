@@ -12,10 +12,14 @@ import { SocialCard } from "./extensions/SocialCard";
 import { SponsorBlockExtension, SPONSOR_BLOCK_EDIT_EVENT } from "./extensions/SponsorBlock";
 import { ImageGalleryExtension } from "./extensions/ImageGallery";
 import { ImageComparisonExtension } from "./extensions/ImageComparison";
+import { PullQuoteExtension } from "./extensions/PullQuote";
+import { KeyTakeawaysExtension } from "./extensions/KeyTakeaways";
 import {
   Bold,
   Italic,
   List,
+  ListChecks,
+  Quote,
   Heading2,
   Heading3,
   AlignLeft,
@@ -34,7 +38,7 @@ import { PostPickerModal } from "@/components/admin/media/PostPickerModal";
 import { SponsorBlockModal } from "@/app/components/admin/posts/SponsorBlockModal";
 import type { PostPickerPost } from "@/lib/actions/post-picker";
 import type { SponsorBlockData } from "@/lib/types/post";
-import { DEFAULT_SPONSOR_BLOCK_DATA } from "@/lib/types/post";
+import { DEFAULT_SPONSOR_BLOCK_DATA, DEFAULT_PULL_QUOTE_DATA, DEFAULT_KEY_TAKEAWAYS_DATA } from "@/lib/types/post";
 
 function getYoutubeId(url: string): string | null {
   const trimmed = url.trim();
@@ -116,6 +120,8 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
       SponsorBlockExtension,
       ImageGalleryExtension,
       ImageComparisonExtension,
+      PullQuoteExtension,
+      KeyTakeawaysExtension,
       Link.configure({ openOnClick: false, HTMLAttributes: { class: "text-hot-blue underline" } }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       Placeholder.configure({ placeholder }),
@@ -349,10 +355,22 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         <ToolbarButton onClick={openSponsorModalForInsert} title="Sponsor block">
           <Handshake className="h-4 w-4" />
         </ToolbarButton>
+        <ToolbarButton
+          onClick={() => editor.chain().focus().setPullQuote(DEFAULT_PULL_QUOTE_DATA).run()}
+          title="Pull quote"
+        >
+          <Quote className="h-4 w-4" />
+        </ToolbarButton>
+        <ToolbarButton
+          onClick={() => editor.chain().focus().setKeyTakeaways(DEFAULT_KEY_TAKEAWAYS_DATA).run()}
+          title="Key Takeaways (TL;DR)"
+        >
+          <ListChecks className="h-4 w-4" />
+        </ToolbarButton>
       </div>
       <EditorContent
         editor={editor}
-        className="prose prose-invert max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_h1]:text-3xl [&_h2]:text-2xl [&_h3]:text-xl [&_.ProseMirror_img]:max-w-full [&_.ProseMirror_img]:h-auto [&_.ProseMirror_img]:rounded-md [&_.content-card]:my-4 [&_.youtube-embed]:my-4 [&_[data-type=sponsor-block]]:my-4 [&_[data-type=image-gallery]]:my-4 [&_[data-type=image-comparison]]:my-4"
+        className="prose prose-invert max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_h1]:text-3xl [&_h2]:text-2xl [&_h3]:text-xl [&_.ProseMirror_img]:max-w-full [&_.ProseMirror_img]:h-auto [&_.ProseMirror_img]:rounded-md [&_.content-card]:my-4 [&_.youtube-embed]:my-4 [&_[data-type=sponsor-block]]:my-4 [&_[data-type=image-gallery]]:my-4 [&_[data-type=image-comparison]]:my-4 [&_[data-type=pull-quote]]:my-4 [&_[data-type=key-takeaways]]:my-4"
       />
 
       <MediaPickerModal

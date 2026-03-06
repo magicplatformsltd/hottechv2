@@ -1,19 +1,26 @@
 "use client";
 
+import React from "react";
 import type {
   SponsorBlockData,
   ImageGalleryData,
   ImageComparisonData,
+  PullQuoteData,
+  KeyTakeawaysData,
 } from "@/lib/types/post";
 import { SponsorBlock } from "@/components/posts/SponsorBlock";
 import { ImageGalleryBlock } from "@/components/posts/ImageGalleryBlock";
 import { ImageComparisonBlock } from "@/components/posts/ImageComparisonBlock";
+import { PullQuoteBlock } from "@/components/posts/PullQuoteBlock";
+import { KeyTakeawaysBlock } from "@/components/posts/KeyTakeawaysBlock";
 
 export type RenderedBlock =
   | { type: "html"; content: string }
   | { type: "sponsor"; data: SponsorBlockData }
   | { type: "imageGallery"; data: ImageGalleryData }
-  | { type: "imageComparison"; data: ImageComparisonData };
+  | { type: "imageComparison"; data: ImageComparisonData }
+  | { type: "pullQuote"; data: PullQuoteData }
+  | { type: "keyTakeaways"; data: KeyTakeawaysData };
 
 type BlockRendererProps = {
   blocks: RenderedBlock[];
@@ -21,6 +28,21 @@ type BlockRendererProps = {
   /** Applied to HTML segment wrappers (e.g. "contents" for prose flow) */
   blockClassName?: string;
 };
+
+/** Ensures h2, h3, figure after a pull quote clear the float. */
+const PULL_QUOTE_CLEAR_STYLE = `
+  .segment-after-pull-quote h2,
+  .segment-after-pull-quote h3,
+  .segment-after-pull-quote figure {
+    clear: both;
+  }
+`;
+
+function wrapAfterPullQuote(blockIndex: number, blocks: RenderedBlock[], content: React.ReactNode) {
+  const prevIsPullQuote = blockIndex > 0 && blocks[blockIndex - 1].type === "pullQuote";
+  if (!prevIsPullQuote) return content;
+  return <div className="segment-after-pull-quote">{content}</div>;
+}
 
 export function BlockRenderer({
   blocks,
@@ -31,24 +53,37 @@ export function BlockRenderer({
 
   return (
     <div className={className}>
+      <style dangerouslySetInnerHTML={{ __html: PULL_QUOTE_CLEAR_STYLE }} />
       {blocks.map((block, i) => {
+        let content: React.ReactNode;
         switch (block.type) {
           case "sponsor":
-            return <SponsorBlock key={i} data={block.data} />;
+            content = <SponsorBlock key={i} data={block.data} />;
+            break;
           case "imageGallery":
-            return <ImageGalleryBlock key={i} data={block.data} />;
+            content = <ImageGalleryBlock key={i} data={block.data} />;
+            break;
           case "imageComparison":
-            return <ImageComparisonBlock key={i} data={block.data} />;
+            content = <ImageComparisonBlock key={i} data={block.data} />;
+            break;
+          case "pullQuote":
+            content = <PullQuoteBlock key={i} data={block.data} />;
+            break;
+          case "keyTakeaways":
+            content = <KeyTakeawaysBlock key={i} data={block.data} />;
+            break;
           case "html":
           default:
-            return block.content ? (
-              <div
-                key={i}
-                dangerouslySetInnerHTML={{ __html: block.content }}
-                className={blockClassName ?? "contents"}
-              />
-            ) : null;
+            content =
+              block.type === "html" && block.content ? (
+                <div
+                  dangerouslySetInnerHTML={{ __html: block.content }}
+                  className={blockClassName ?? "contents"}
+                />
+              ) : null;
+            break;
         }
+        return content ? <React.Fragment key={i}>{wrapAfterPullQuote(i, blocks, content)}</React.Fragment> : null;
       })}
     </div>
   );
