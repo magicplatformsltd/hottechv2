@@ -60,19 +60,19 @@ export function KeyTakeawaysNodeView({ node, getPos, editor }: NodeViewProps) {
 
   return (
     <NodeViewWrapper className="my-6 block">
-      <div className="rounded-lg border-l-4 border-hot-white/30 bg-white/5 p-8">
-        <h4 className="mb-3 font-sans text-sm font-semibold uppercase tracking-wide text-gray-400">
+      <div className="rounded-lg border-l-4 border-hot-white/30 bg-gradient-to-br from-hot-gray/50 to-hot-gray/20 px-6 py-5">
+        <h4 className="mb-3 font-sans text-[11px] font-semibold uppercase tracking-widest text-gray-400">
           Key Takeaways
         </h4>
-        <ul className="list-disc space-y-2 pl-5">
+        <ul className="list-disc space-y-2 pl-5 font-sans text-base font-normal leading-normal text-hot-white/90 marker:text-hot-white/70">
           {items.map((item, index) => (
-            <li key={index} className="flex gap-2 font-sans text-sm text-hot-white/90">
+            <li key={index} className="flex gap-2 font-sans text-base font-normal leading-normal text-hot-white/90">
               <input
                 type="text"
                 value={item}
                 onChange={(e) => setItem(index, e.target.value)}
                 placeholder="Takeaway…"
-                className="min-w-0 flex-1 border-0 bg-transparent font-sans text-sm text-hot-white placeholder-gray-500 focus:ring-0"
+                className="min-w-0 flex-1 border-0 bg-transparent font-sans text-base font-normal leading-normal text-hot-white placeholder-gray-500 focus:ring-0"
               />
               <button
                 type="button"

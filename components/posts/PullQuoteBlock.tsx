@@ -11,21 +11,22 @@ export function PullQuoteBlock({ data }: PullQuoteBlockProps) {
   if (!quoteText?.trim()) return null;
 
   const isCenter = alignment === "full";
-  const wrapperClass =
+  const floatClass =
     isCenter
-      ? "my-8 w-full text-center mt-0 clear-both"
+      ? "w-full text-center mb-10"
       : alignment === "right"
-        ? "float-right w-full md:w-[33%] ml-0 md:ml-8 mb-4 mt-0"
-        : "float-left w-full md:w-[33%] mr-0 md:mr-8 mb-4 mt-0";
+        ? "float-right w-full md:w-[33%] ml-0 md:ml-8 mt-0 mb-4"
+        : "float-left w-full md:w-[33%] mr-0 md:mr-8 mt-0 mb-4";
 
   const quoteClass =
     isCenter
       ? "font-serif text-2xl md:text-3xl text-hot-white/95 text-center"
-      : "font-serif text-xl md:text-2xl text-hot-white/95";
+      : "font-serif text-xl md:text-2xl text-hot-white/95 leading-relaxed";
 
   return (
-    <div className={`clear-both ${wrapperClass}`}>
-      <blockquote className={quoteClass}>
+    <div className="mt-8 clear-both">
+      <div className={floatClass}>
+        <blockquote className={quoteClass}>
         &ldquo;{quoteText.trim()}&rdquo;
       </blockquote>
       {attribution?.trim() && (
@@ -33,6 +34,7 @@ export function PullQuoteBlock({ data }: PullQuoteBlockProps) {
           — {attribution.trim()}
         </footer>
       )}
+      </div>
     </div>
   );
 }

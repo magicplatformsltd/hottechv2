@@ -35,7 +35,7 @@ export const PullQuoteExtension = Node.create({
   priority: 1000,
 
   group: "block",
-  atom: false,
+  atom: true,
 
   addAttributes() {
     return {

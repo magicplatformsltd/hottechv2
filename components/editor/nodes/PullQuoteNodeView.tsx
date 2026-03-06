@@ -71,13 +71,14 @@ export function PullQuoteNodeView({ node, getPos, editor }: NodeViewProps) {
   const badgeActive = "bg-hot-white text-hot-black";
   const badgeInactive = "text-gray-400 hover:bg-white/10 hover:text-hot-white";
 
+  const isFloated = alignment !== "full";
   return (
-    <NodeViewWrapper className="mt-0 mb-4 block clear-both">
+    <NodeViewWrapper className="mt-8 block clear-both">
       <div
         ref={containerRef}
         onFocusCapture={() => setIsFocused(true)}
         onBlurCapture={handleBlur}
-        className={`rounded-lg border border-white/10 bg-white/5 p-4 transition-all duration-200 ${layoutClass}`}
+        className={`rounded-lg border border-white/10 bg-white/5 p-4 transition-all duration-200 ${isFloated ? "mt-0 mb-4 " : "mb-10 "}${layoutClass}`}
       >
         <div className="mb-3 flex flex-wrap items-center gap-2 border-b border-white/10 pb-2">
           <span className="font-sans text-xs text-gray-500">Pull Quote</span>
@@ -109,7 +110,7 @@ export function PullQuoteNodeView({ node, getPos, editor }: NodeViewProps) {
           </div>
         </div>
         <blockquote
-          className={`font-serif text-xl text-hot-white/95 ${isCenter ? "text-center" : ""}`}
+          className={`font-serif text-xl text-hot-white/95 ${isCenter ? "text-center" : "leading-relaxed"}`}
         >
           <textarea
             value={quoteText}

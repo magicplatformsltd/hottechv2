@@ -29,7 +29,7 @@ type BlockRendererProps = {
   blockClassName?: string;
 };
 
-/** Ensures h2, h3, figure after a pull quote clear the float. */
+/** Headings/figures after a pull quote clear the float so they don't wrap. */
 const PULL_QUOTE_CLEAR_STYLE = `
   .segment-after-pull-quote h2,
   .segment-after-pull-quote h3,
