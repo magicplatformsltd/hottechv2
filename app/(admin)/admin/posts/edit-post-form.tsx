@@ -418,16 +418,69 @@ export function EditPostForm({
           </div>
         )}
 
-        <SidebarSection
-          title={`Publish Date (${getTimezoneLabel(siteTimezone)})`}
-          defaultOpen={true}
-        >
-          <input
-            type="datetime-local"
-            value={publishedAt}
-            onChange={(e) => setPublishedAt(e.target.value)}
-            className="w-full rounded-md border border-white/10 bg-hot-black px-3 py-2 font-sans text-sm text-hot-white focus:border-hot-white/30 focus:outline-none"
-          />
+        <SidebarSection title="Publishing" defaultOpen={true}>
+          <div className="space-y-3">
+            <select
+              value={status}
+              onChange={(e) => setStatus(e.target.value as "draft" | "published")}
+              className="w-full rounded-md border border-white/10 bg-hot-black px-3 py-2 font-sans text-sm text-hot-white focus:border-hot-white/30 focus:outline-none"
+            >
+              <option value="draft">Draft</option>
+              <option value="published">
+                {status === "published" && isScheduled ? "Scheduled" : "Published"}
+              </option>
+            </select>
+            <div>
+              <label className="block font-sans text-xs text-gray-500 mb-1">
+                Publish Date ({getTimezoneLabel(siteTimezone)})
+              </label>
+              <input
+                type="datetime-local"
+                value={publishedAt}
+                onChange={(e) => setPublishedAt(e.target.value)}
+                className="w-full rounded-md border border-white/10 bg-hot-black px-3 py-2 font-sans text-sm text-hot-white focus:border-hot-white/30 focus:outline-none"
+              />
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => handleSave(true)}
+                disabled={saving || isPublishing}
+                className="flex-1 rounded-md border border-white/20 bg-white/5 py-2 font-sans text-sm font-medium text-hot-white transition-colors hover:bg-white/10 disabled:opacity-50"
+              >
+                {saving ? "Saving…" : "Save Draft"}
+              </button>
+              <button
+                type="button"
+                onClick={() => (post?.id ? handlePublish() : handleSave(false))}
+                disabled={saving || isPublishing}
+                className="flex-1 rounded-md bg-hot-white py-2 font-sans text-sm font-medium text-hot-black transition-colors hover:bg-hot-white/90 disabled:opacity-50"
+              >
+                {post?.id
+                  ? isPublishing
+                    ? isScheduled
+                      ? "Scheduling…"
+                      : "Publishing…"
+                    : isScheduled
+                      ? "Schedule"
+                      : "Publish"
+                  : saving
+                    ? "Saving…"
+                    : isScheduled
+                      ? "Schedule"
+                      : "Publish"}
+              </button>
+            </div>
+            <button
+              type="button"
+              onClick={() => { if (post?.id) window.open(`/admin/preview/${post.id}`, "_blank"); }}
+              disabled={!post?.id}
+              className="flex w-full items-center justify-center gap-2 rounded-md border border-white/20 bg-white/5 py-2 font-sans text-sm font-medium text-hot-white transition-colors hover:bg-white/10 disabled:opacity-50 disabled:pointer-events-none"
+            >
+              <Eye className="h-4 w-4" />
+              Preview
+            </button>
+          </div>
         </SidebarSection>
 
         <SidebarSection title="Publication Info" defaultOpen={true}>
@@ -547,60 +600,6 @@ export function EditPostForm({
             selectedTags={selectedTags}
             onChange={setSelectedTags}
           />
-        </SidebarSection>
-
-        <SidebarSection title="Publish" defaultOpen={true}>
-          <div className="space-y-2">
-            <select
-              value={status}
-              onChange={(e) => setStatus(e.target.value as "draft" | "published")}
-              className="w-full rounded-md border border-white/10 bg-hot-black px-3 py-2 font-sans text-sm text-hot-white focus:border-hot-white/30 focus:outline-none"
-            >
-              <option value="draft">Draft</option>
-              <option value="published">
-                {status === "published" && isScheduled ? "Scheduled" : "Published"}
-              </option>
-            </select>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => handleSave(true)}
-                disabled={saving || isPublishing}
-                className="flex-1 rounded-md border border-white/20 bg-white/5 py-2 font-sans text-sm font-medium text-hot-white transition-colors hover:bg-white/10 disabled:opacity-50"
-              >
-                {saving ? "Saving…" : "Save Draft"}
-              </button>
-              <button
-                type="button"
-                onClick={() => (post?.id ? handlePublish() : handleSave(false))}
-                disabled={saving || isPublishing}
-                className="flex-1 rounded-md bg-hot-white py-2 font-sans text-sm font-medium text-hot-black transition-colors hover:bg-hot-white/90 disabled:opacity-50"
-              >
-                {post?.id
-                  ? isPublishing
-                    ? isScheduled
-                      ? "Scheduling…"
-                      : "Publishing…"
-                    : isScheduled
-                      ? "Schedule"
-                      : "Publish"
-                  : saving
-                    ? "Saving…"
-                    : isScheduled
-                      ? "Schedule"
-                      : "Publish"}
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={() => { if (post?.id) window.open(`/admin/preview/${post.id}`, "_blank"); }}
-              disabled={!post?.id}
-              className="flex w-full items-center justify-center gap-2 rounded-md border border-white/20 bg-white/5 py-2 font-sans text-sm font-medium text-hot-white transition-colors hover:bg-white/10 disabled:opacity-50 disabled:pointer-events-none"
-            >
-              <Eye className="h-4 w-4" />
-              Preview
-            </button>
-          </div>
         </SidebarSection>
 
         <SidebarSection title="URL Slug" defaultOpen={false}>
