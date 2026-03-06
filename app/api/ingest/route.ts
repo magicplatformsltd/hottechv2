@@ -4,6 +4,11 @@ import { createClient } from "@supabase/supabase-js";
 import { headers } from "next/headers";
 import { NextResponse } from "next/server";
 import { createClient as createServerClient } from "@/utils/supabase/server";
+import {
+  extractAllAuthoryUrls,
+  localizeAllAuthoryUrls,
+  replaceUrlsInPostFields,
+} from "@/lib/asset-localization";
 
 /** AI returns names; we resolve to DB IDs using pre-fetched maps. */
 type NameBasedClassification = {
@@ -301,8 +306,46 @@ export async function GET() {
       const rawDate = item.isoDate ?? new Date().toISOString();
       const published_at = new Date(rawDate).toISOString();
       const snippet = item.contentSnippet?.trim() ?? null;
-      const featured_image = getImageFromAuthoryItem(item);
+      const rawFeaturedImage = getImageFromAuthoryItem(item);
+      const rawContent =
+        typeof item.contentEncoded === "string"
+          ? item.contentEncoded
+          : typeof item.content === "string"
+            ? item.content
+            : "";
       const original_url = link || null;
+
+      // Build post fields and localize any authory.com assets (download → Supabase storage → media_items)
+      const rawFields = {
+        featured_image: rawFeaturedImage,
+        main_image: rawFeaturedImage,
+        draft_hero_image: rawFeaturedImage,
+        content: rawContent,
+        showcase_data: [] as unknown,
+      };
+      let featured_image = rawFeaturedImage;
+      let main_image = rawFeaturedImage;
+      let draft_hero_image = rawFeaturedImage;
+      let content = rawContent;
+
+      const authoryUrls = extractAllAuthoryUrls(rawFields);
+      if (authoryUrls.length > 0) {
+        try {
+          const urlMap = await localizeAllAuthoryUrls(supabase, rawFields, {
+            addToMediaLibrary: true,
+          });
+          const replaced = replaceUrlsInPostFields(rawFields, urlMap);
+          featured_image = replaced.featured_image ?? featured_image;
+          main_image = replaced.main_image ?? main_image;
+          draft_hero_image = replaced.draft_hero_image ?? draft_hero_image;
+          content = replaced.content ?? content;
+        } catch (localizeErr) {
+          console.warn("[ingest] Asset localization failed, using placeholder for post:", title, localizeErr);
+          featured_image = PLACEHOLDER_IMAGE;
+          main_image = PLACEHOLDER_IMAGE;
+          draft_hero_image = PLACEHOLDER_IMAGE;
+        }
+      }
 
       if (i === 0) {
         console.log("[ingest] First item — Date:", published_at, "Image:", featured_image);
@@ -314,13 +357,13 @@ export async function GET() {
           title,
           slug,
           featured_image,
-          main_image: featured_image,
-          draft_hero_image: featured_image,
+          main_image,
+          draft_hero_image,
           source_name: getPublisherFromUrl(link),
           original_url,
           excerpt: snippet,
           summary: snippet,
-          content: "",
+          content: content || "",
           published_at,
           created_at: published_at,
           status: "published",
