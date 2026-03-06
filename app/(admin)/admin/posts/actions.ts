@@ -75,12 +75,50 @@ export type PostRow = {
   tag_names?: string[];
 }
 
-export async function getPosts(): Promise<PostRow[]> {
+export async function getPosts(query?: string): Promise<PostRow[]> {
   const client = await createClient();
-  const { data, error } = await client
+  let q = client
     .from("posts")
-    .select("id, title, slug, excerpt, content, main_image, status, created_at, updated_at, published_at, source_name, post_categories(categories(name)), post_tags(tags(name))")
-    .order("created_at", { ascending: false });
+    .select("id, title, slug, excerpt, content, main_image, status, created_at, updated_at, published_at, source_name, post_categories(categories(name)), post_tags(tags(name))");
+  const trimmed = (query ?? "").trim();
+  if (trimmed) {
+    const pattern = `%${trimmed.replace(/"/g, '""')}%`;
+
+    // 1. Taxonomy: find post IDs matching category or tag names (text columns only)
+    const [catRes, tagRes] = await Promise.all([
+      client.from("categories").select("id").ilike("name", `%${trimmed}%`),
+      client.from("tags").select("id").ilike("name", `%${trimmed}%`),
+    ]);
+    const categoryIds = (catRes.data ?? []).map((r: { id: number }) => r.id);
+    const tagIds = (tagRes.data ?? []).map((r: { id: number }) => r.id);
+
+    let taxonomyPostIds: string[] = [];
+    if (categoryIds.length > 0) {
+      const { data: pcData } = await client
+        .from("post_categories")
+        .select("post_id")
+        .in("category_id", categoryIds);
+      taxonomyPostIds = [...new Set((pcData ?? []).map((r: { post_id: string }) => r.post_id))];
+    }
+    if (tagIds.length > 0) {
+      const { data: ptData } = await client
+        .from("post_tags")
+        .select("post_id")
+        .in("tag_id", tagIds);
+      const tagPostIds = (ptData ?? []).map((r: { post_id: string }) => r.post_id);
+      taxonomyPostIds = [...new Set([...taxonomyPostIds, ...tagPostIds])];
+    }
+
+    // 2. Build OR filter: text columns only (exclude JSONB: showcase_data, display_options, content)
+    // Note: content may be JSONB in some setups; only search title, source_name, excerpt
+    const textOr = `title.ilike."${pattern}",source_name.ilike."${pattern}",excerpt.ilike."${pattern}"`;
+    const orFilter =
+      taxonomyPostIds.length > 0
+        ? `${textOr},id.in.(${taxonomyPostIds.join(",")})`
+        : textOr;
+    q = q.or(orFilter);
+  }
+  const { data, error } = await q.order("created_at", { ascending: false });
 
   if (error) {
     console.error("[getPosts]", error);

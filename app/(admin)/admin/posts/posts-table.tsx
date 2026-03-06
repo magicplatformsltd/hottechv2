@@ -31,16 +31,29 @@ function PostRowActions({ id }: { id: string }) {
   );
 }
 
-export function PostsTable({ posts }: { posts: PostRow[] }) {
+type PostsTableProps = {
+  posts: PostRow[];
+  searchQuery?: string;
+};
+
+export function PostsTable({ posts, searchQuery }: PostsTableProps) {
   if (posts.length === 0) {
-    return (
-      <tr>
-        <td colSpan={4} className="px-4 py-8 text-center text-gray-400">
+    const emptyMessage =
+      searchQuery?.trim() ? (
+        "No posts found."
+      ) : (
+        <>
           No posts yet.{" "}
           <Link href="/admin/posts/new" className="text-hot-white hover:underline">
             Add one
           </Link>
           .
+        </>
+      );
+    return (
+      <tr>
+        <td colSpan={4} className="px-4 py-8 text-center text-gray-400">
+          {emptyMessage}
         </td>
       </tr>
     );

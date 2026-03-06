@@ -1,9 +1,16 @@
 import Link from "next/link";
 import { getPosts } from "./actions";
 import { PostsTable } from "./posts-table";
+import { PostsSearchBar } from "./posts-search-bar";
 
-export default async function AdminPostsPage() {
-  const posts = await getPosts();
+type PageProps = {
+  searchParams: Promise<{ q?: string }>;
+};
+
+export default async function AdminPostsPage({ searchParams }: PageProps) {
+  const params = await searchParams;
+  const query = params.q ?? "";
+  const posts = await getPosts(query || undefined);
 
   return (
     <div className="flex h-full min-h-0 flex-col p-6 lg:p-10">
@@ -11,12 +18,15 @@ export default async function AdminPostsPage() {
         <h1 className="font-serif text-2xl font-bold text-hot-white">
           All Posts
         </h1>
-        <Link
-          href="/admin/posts/new"
-          className="rounded-md bg-hot-white px-4 py-2 font-sans text-sm font-medium text-hot-black transition-colors hover:bg-hot-white/90"
-        >
-          Add New
-        </Link>
+        <div className="flex items-center gap-4">
+          <PostsSearchBar />
+          <Link
+            href="/admin/posts/new"
+            className="shrink-0 rounded-md bg-hot-white px-4 py-2 font-sans text-sm font-medium text-hot-black transition-colors hover:bg-hot-white/90"
+          >
+            Add New
+          </Link>
+        </div>
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto pt-6">
@@ -39,7 +49,7 @@ export default async function AdminPostsPage() {
             </tr>
           </thead>
           <tbody>
-            <PostsTable posts={posts} />
+            <PostsTable posts={posts} searchQuery={query} />
           </tbody>
           </table>
         </div>
