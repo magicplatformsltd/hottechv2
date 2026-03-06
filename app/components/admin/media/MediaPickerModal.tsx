@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
 import Image from "next/image";
 import { createBrowserClient } from "@supabase/ssr";
 import { UploadCloud, Image as ImageIcon, X, Search, ChevronDown, Save } from "lucide-react";
@@ -102,6 +103,9 @@ export function MediaPickerModal({
 
   const supabase = getSupabase();
   const isCommandCenter = context === "editor";
+  /** Picker with sidebar uses same wide layout as command center */
+  const useWideLayout = isCommandCenter || context === "picker";
+  const showMetadataSidebar = useWideLayout;
 
   useEffect(() => {
     if (!isOpen) {
@@ -139,9 +143,9 @@ export function MediaPickerModal({
   useEffect(() => {
     if (isOpen) {
       fetchImages();
-      if (isCommandCenter) fetchTags();
+      if (showMetadataSidebar) fetchTags();
     }
-  }, [isOpen, fetchImages, fetchTags, isCommandCenter]);
+  }, [isOpen, fetchImages, fetchTags, showMetadataSidebar]);
 
   useEffect(() => {
     if (focusedItem) {
@@ -369,7 +373,7 @@ export function MediaPickerModal({
   };
 
   const handleThumbnailClick = (item: MediaItemWithTags) => {
-    if (isCommandCenter) {
+    if (isCommandCenter || (context === "picker" && showMetadataSidebar)) {
       setFocusedItem(item);
     } else if (!multiSelect && onSelect) {
       handleSelect(item.url, item.alt_text ?? undefined);
@@ -395,12 +399,13 @@ export function MediaPickerModal({
 
   const showInsertDropdown = isCommandCenter && selectedIds.size >= 1;
   const canComparison = selectedIds.size === 2;
+  const showPickerUseButton = context === "picker" && showMetadataSidebar && focusedItem;
 
-  return (
+  const modalContent = (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
       <div
         className={`relative flex flex-col rounded-lg border border-white/10 bg-hot-gray text-hot-white shadow-xl ${
-          isCommandCenter ? "h-[90vh] w-[90vw] max-w-[1400px]" : "w-full max-w-2xl"
+          useWideLayout ? "h-[90vh] w-[90vw] max-w-[1400px]" : "w-full max-w-2xl"
         }`}
       >
         {/* Header */}
@@ -479,7 +484,7 @@ export function MediaPickerModal({
             <>
               {/* 70% Gallery */}
               <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
-                {isCommandCenter && (
+                {showMetadataSidebar && (
                   <div className="shrink-0 border-b border-white/10 px-4 py-2">
                     <div className="relative">
                       <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-500" />
@@ -503,7 +508,7 @@ export function MediaPickerModal({
                   ) : (
                     <div
                       className={`grid gap-2 ${
-                        isCommandCenter
+                        useWideLayout
                           ? "grid-cols-4 sm:grid-cols-5 lg:grid-cols-6"
                           : "grid-cols-3"
                       }`}
@@ -557,8 +562,8 @@ export function MediaPickerModal({
                 </div>
               </div>
 
-              {/* 30% Sidebar (command center only) */}
-              {isCommandCenter && (
+              {/* 30% Sidebar (metadata) */}
+              {showMetadataSidebar && (
                 <div className="flex w-[30%] min-w-[280px] flex-col border-l border-white/10 bg-hot-black/30">
                   {focusedItem ? (
                     <div className="flex flex-1 flex-col overflow-y-auto p-4">
@@ -655,7 +660,20 @@ export function MediaPickerModal({
 
         {/* 10% Fixed Footer */}
         <div className="shrink-0 border-t border-white/10 bg-hot-gray/95 px-4 py-3">
-          {isCommandCenter && showInsertDropdown ? (
+          {showPickerUseButton ? (
+            <button
+              type="button"
+              onClick={async () => {
+                if (!focusedItem) return;
+                await savePendingBeforeInsert();
+                const alt = (sidebarForm.alt_text?.trim() || focusedItem.alt_text) ?? undefined;
+                handleSelect(focusedItem.url, alt);
+              }}
+              className="rounded-md bg-hot-white px-4 py-2 font-sans text-sm font-medium text-hot-gray transition hover:bg-hot-white/90"
+            >
+              Use this image
+            </button>
+          ) : isCommandCenter && showInsertDropdown ? (
             <div className="relative">
               <button
                 type="button"
@@ -735,4 +753,6 @@ export function MediaPickerModal({
       </div>
     </div>
   );
+
+  return typeof document !== "undefined" ? createPortal(modalContent, document.body) : null;
 }

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { createBrowserClient } from "@supabase/ssr";
 import { Trash2 } from "lucide-react";
-import { MediaPicker } from "@/app/components/admin/MediaPicker";
+import { MediaPickerModal } from "@/app/components/admin/media/MediaPickerModal";
 
 type MediaItem = {
   id: string;
@@ -132,9 +132,14 @@ export default function AdminMediaPage() {
       )}
 
       {pickerOpen && (
-        <MediaPicker
-          onSelect={handleUploadSelect}
-          onCancel={() => setPickerOpen(false)}
+        <MediaPickerModal
+          isOpen={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          onSelect={(url) => {
+            handleUploadSelect(url);
+          }}
+          context="picker"
+          multiSelect={false}
         />
       )}
     </div>

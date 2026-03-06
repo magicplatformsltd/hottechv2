@@ -71,6 +71,8 @@ export function UniversalImagePicker({
         isOpen={modalOpen}
         onClose={() => setModalOpen(false)}
         onSelect={handleSelect}
+        context="picker"
+        multiSelect={false}
       />
     </div>
   );

@@ -12,7 +12,8 @@ import { SocialPresence } from "@/components/home/social-presence";
 import { ViewTracker } from "@/components/analytics/ViewTracker";
 
 export const runtime = "nodejs";
-export const revalidate = 3600;
+/** Temporary: bypass Next.js cache for homepage to test fresh image URLs. */
+export const revalidate = 0;
 
 export default async function Home() {
   const [feed, settings] = await Promise.all([
@@ -52,6 +53,14 @@ export default async function Home() {
     smartFeedBlocks.forEach((b, i) => {
       smartFeedItemsByBlockId[b.id] = results[i];
     });
+  }
+
+  // Logger: first featured post image URL from first block that has items (for debugging Authory URLs)
+  const firstGridItems = Object.values(gridItemsByBlockId).flat();
+  const firstSmartItems = Object.values(smartFeedItemsByBlockId).flat();
+  const firstPost = firstGridItems[0] ?? firstSmartItems[0];
+  if (firstPost) {
+    console.log("Homepage Image URL:", firstPost.image);
   }
 
   return (

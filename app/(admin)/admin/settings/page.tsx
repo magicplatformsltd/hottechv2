@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createBrowserClient } from "@supabase/ssr";
-import { MediaPicker } from "@/app/components/admin/MediaPicker";
+import { UniversalImagePicker } from "@/app/components/admin/shared/UniversalImagePicker";
 import { SeoSettings } from "@/app/components/admin/settings/SeoSettings";
 
 type CtaSettings = {
@@ -52,9 +52,6 @@ export default function AdminSettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savedMessage, setSavedMessage] = useState<string | null>(null);
-  const [logoPickerOpen, setLogoPickerOpen] = useState(false);
-  const [headshotPickerOpen, setHeadshotPickerOpen] = useState(false);
-
   const [siteName, setSiteName] = useState("");
   const [siteDescription, setSiteDescription] = useState("");
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
@@ -218,58 +215,18 @@ export default function AdminSettingsPage() {
           />
         </div>
         <div>
-          <label className="mb-1 block font-sans text-sm text-gray-400">
-            Site Logo
-          </label>
-          <div className="flex items-center gap-4">
-            <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-lg border border-white/20 bg-black">
-              {logoUrl ? (
-                <img
-                  src={logoUrl}
-                  alt="Site logo"
-                  className="h-full w-full object-contain"
-                />
-              ) : (
-                <span className="font-sans text-xs text-gray-500">
-                  No logo
-                </span>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => setLogoPickerOpen(true)}
-              className="rounded-md border border-white/20 px-3 py-2 font-sans text-sm text-hot-white transition hover:bg-white/10"
-            >
-              Select Image
-            </button>
-          </div>
+          <UniversalImagePicker
+            label="Site Logo"
+            value={logoUrl}
+            onChange={(url) => setLogoUrl(url || null)}
+          />
         </div>
         <div>
-          <label className="mb-1 block font-sans text-sm text-gray-400">
-            Author Headshot
-          </label>
-          <div className="flex items-center gap-4">
-            <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-lg border border-white/20 bg-black">
-              {headshotUrl ? (
-                <img
-                  src={headshotUrl}
-                  alt="Author headshot"
-                  className="h-full w-full object-cover"
-                />
-              ) : (
-                <span className="font-sans text-xs text-gray-500">
-                  No image
-                </span>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={() => setHeadshotPickerOpen(true)}
-              className="rounded-md border border-white/20 px-3 py-2 font-sans text-sm text-hot-white transition hover:bg-white/10"
-            >
-              Select Image
-            </button>
-          </div>
+          <UniversalImagePicker
+            label="Author Headshot"
+            value={headshotUrl}
+            onChange={(url) => setHeadshotUrl(url || null)}
+          />
         </div>
       </section>
 
@@ -382,25 +339,6 @@ export default function AdminSettingsPage() {
         </button>
       </div>
       </div>
-
-      {logoPickerOpen && (
-        <MediaPicker
-          onSelect={(url) => {
-            setLogoUrl(url);
-            setLogoPickerOpen(false);
-          }}
-          onCancel={() => setLogoPickerOpen(false)}
-        />
-      )}
-      {headshotPickerOpen && (
-        <MediaPicker
-          onSelect={(url) => {
-            setHeadshotUrl(url);
-            setHeadshotPickerOpen(false);
-          }}
-          onCancel={() => setHeadshotPickerOpen(false)}
-        />
-      )}
     </div>
   );
 }

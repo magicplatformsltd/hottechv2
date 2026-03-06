@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { createClient } from "@/utils/supabase/server";
 import type { HomepageBlock, FooterConfig } from "@/lib/types";
 
@@ -213,4 +213,64 @@ export async function updateFooterSettings(
   revalidatePath("/admin/footer");
   revalidatePath("/", "layout");
   return {};
+}
+
+/** Sync featured post metadata: refresh homepage layout cache from posts table and invalidate site-settings cache. */
+export async function syncFeaturedPostMetadata(): Promise<{
+  error?: string;
+  postImages?: Record<string, string | null>;
+}> {
+  const client = await createClient();
+  const {
+    data: { user },
+  } = await client.auth.getUser();
+  if (!user) {
+    return { error: "Unauthorized." };
+  }
+
+  const { data: settingsRow, error: fetchError } = await client
+    .from("site_settings")
+    .select("homepage_layout")
+    .eq("id", 1)
+    .maybeSingle();
+
+  if (fetchError || !settingsRow) {
+    return { error: fetchError?.message ?? "Failed to load site settings." };
+  }
+
+  const layout = (settingsRow.homepage_layout ?? []) as HomepageBlock[];
+  const postIds: string[] = [];
+  for (const block of layout) {
+    if (block.type === "feature_grid" && block.data && typeof block.data === "object") {
+      const data = block.data as { postIds?: string[] };
+      const ids = Array.isArray(data.postIds) ? data.postIds : [];
+      postIds.push(...ids.filter((id): id is string => typeof id === "string"));
+    }
+  }
+
+  const uniqueIds = [...new Set(postIds)];
+  if (uniqueIds.length === 0) {
+    revalidateTag("site-settings");
+    revalidatePath("/");
+    return { postImages: {} };
+  }
+
+  const { data: posts, error: postsError } = await client
+    .from("posts")
+    .select("id, featured_image, main_image")
+    .in("id", uniqueIds);
+
+  if (postsError) {
+    return { error: postsError.message };
+  }
+
+  const postImages: Record<string, string | null> = {};
+  for (const p of posts ?? []) {
+    const url = p.featured_image ?? p.main_image ?? null;
+    postImages[p.id] = url;
+  }
+
+  revalidateTag("site-settings");
+  revalidatePath("/");
+  return { postImages };
 }
