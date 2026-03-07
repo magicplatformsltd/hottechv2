@@ -6,9 +6,12 @@ import { Plus, Minus, CheckCircle, XCircle } from "lucide-react";
 import { getProductById } from "@/lib/actions/product";
 import { getTemplateById } from "@/lib/actions/template";
 import { getAwardById } from "@/lib/actions/award";
-import type { Product } from "@/lib/types/product";
+import type { Product, ProductSpecsInput, VariantMatrixEntry, BooleanWithDetails } from "@/lib/types/product";
+import { getFlattenedSpecs, getRawSpecValue } from "@/lib/types/product";
 import type { ProductTemplate } from "@/lib/types/product";
 import type { ProductBoxBlockData } from "@/lib/types/post";
+import { getTemplateSchemaAsGroups } from "@/lib/types/template";
+import type { SpecGroup } from "@/lib/types/template";
 import { getCurrencySymbol } from "@/lib/constants/currencies";
 import { AwardBadge } from "./AwardBadge";
 
@@ -89,6 +92,49 @@ function normalizeCustomList(raw: string | string[] | null | undefined): string[
   } catch {
     return raw.trim() ? [raw.trim()] : [];
   }
+}
+
+/** Format variant matrix array for Key Specs: RAM and Storage on separate lines. */
+function formatVariantMatrixForCombiner(arr: VariantMatrixEntry[]): string {
+  const rams = [...new Set(arr.map((x) => (x.ram ?? "").trim()).filter(Boolean))];
+  const storages = [...new Set(arr.map((x) => (x.storage ?? "").trim()).filter(Boolean))];
+  const line1 = rams.length > 0 ? `${rams.join("/")} RAM` : "";
+  const line2 = storages.length > 0 ? `${storages.join("/")} Storage` : "";
+  if (line1 && line2) return `${line1}\n${line2}`;
+  return line1 || line2 || "";
+}
+
+/** Format boolean-with-details for display: "No" | "Yes" | "Yes (details)". */
+function formatBooleanWithDetails(obj: BooleanWithDetails): string {
+  if (obj.value === false) return "No";
+  const d = (obj.details ?? "").trim();
+  return d ? `Yes (${d})` : "Yes";
+}
+
+/** Combined key specs per group: { label: groupName, value: space-joined key spec values }. Handles variant_matrix. */
+function getCombinedKeySpecs(
+  productSpecs: ProductSpecsInput | null | undefined,
+  templateSchema: SpecGroup[]
+): { label: string; value: string }[] {
+  const result: { label: string; value: string }[] = [];
+  for (const group of templateSchema) {
+    const groupName = group.groupName?.trim() || "General";
+    const keySpecs = (group.specs ?? []).filter((s) => s.isKey);
+    const values = keySpecs
+      .map((s) => {
+        const raw = getRawSpecValue(productSpecs, groupName, s.name ?? "");
+        if (typeof raw === "string") return raw.trim();
+        if (Array.isArray(raw) && raw.length > 0) return formatVariantMatrixForCombiner(raw as VariantMatrixEntry[]);
+        if (raw && typeof raw === "object" && !Array.isArray(raw) && "value" in raw)
+          return formatBooleanWithDetails(raw as BooleanWithDetails);
+        return "";
+      })
+      .filter(Boolean);
+    if (values.length > 0) {
+      result.push({ label: groupName, value: values.join(" ") });
+    }
+  }
+  return result;
 }
 
 export function ProductReviewCard({ data, className = "" }: ProductReviewCardProps) {
@@ -203,11 +249,14 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
         : allAffiliates
       : [];
 
-  const specs = product.specs && typeof product.specs === "object" ? product.specs : {};
+  const specs = getFlattenedSpecs(product.specs);
+  const templateSchema = getTemplateSchemaAsGroups(template?.spec_schema);
+  const combinedKeySpecs = templateSchema.length > 0 ? getCombinedKeySpecs(product.specs, templateSchema) : [];
   const keySpecsToShow = keySpecKeysToShow.filter((k) => k in specs).map((key) => ({
     key,
     value: String(specs[key] ?? "—"),
   }));
+  const keySpecsDisplay = combinedKeySpecs.length > 0 ? combinedKeySpecs : keySpecsToShow.map(({ key, value }) => ({ label: key, value }));
 
   const finalScore = product.editorial_data?.final_score;
   const showStarRating = config.showStarRating !== false;
@@ -236,12 +285,115 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
     config.showProsCons !== false &&
     (displayPros.length > 0 || displayCons.length > 0);
 
+  const isSpecSheetTemplate = data.template === "spec_sheet";
+
   return (
     <article
       className={`w-full rounded-xl border border-white/10 bg-white/5 dark:bg-slate-900/50 backdrop-blur-md overflow-hidden ${className}`}
       data-product-id={product.id}
     >
       <div className="p-5 sm:p-6">
+        {isSpecSheetTemplate ? (
+          <>
+            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">{product.name}</h2>
+            {/* Standalone Spec Sheet — GSMArena-style grouped table */}
+            <div className="w-full bg-white/5 border border-white/10 rounded-xl overflow-hidden mb-8">
+              {templateSchema.length === 0 ? (
+                <div className="p-4 text-sm text-gray-500">No spec schema. Assign a template to this product.</div>
+              ) : (
+                templateSchema.map((group) => {
+                  const groupName = group.groupName?.trim() || "General";
+                  const specRows = (group.specs ?? []).filter((spec) => {
+                    const specName = spec.name?.trim() ?? "";
+                    const val = getRawSpecValue(product.specs, groupName, specName);
+                    if (typeof val === "string") return val.trim() !== "";
+                    if (Array.isArray(val)) return val.some((x) => ((x.ram ?? "") + (x.storage ?? "")).trim() !== "");
+                    if (val && typeof val === "object" && !Array.isArray(val) && "value" in val) return true;
+                    return false;
+                  });
+                  if (specRows.length === 0) return null;
+                  return (
+                    <div key={group.id || groupName}>
+                      <div className="bg-white/10 p-3 font-bold text-sm uppercase tracking-wider text-gray-200 dark:text-gray-300">
+                        {groupName}
+                      </div>
+                      {specRows.map((spec) => {
+                        const specName = spec.name?.trim() ?? "";
+                        const rawValue = getRawSpecValue(product.specs, groupName, specName);
+                        const display =
+                          typeof rawValue === "string"
+                            ? rawValue.trim()
+                            : Array.isArray(rawValue)
+                              ? (rawValue as VariantMatrixEntry[])
+                                  .map((item) => {
+                                    const r = (item.ram ?? "").trim();
+                                    const s = (item.storage ?? "").trim();
+                                    if (r && s) return `${r} RAM / ${s}`;
+                                    if (r) return `${r} RAM`;
+                                    return s;
+                                  })
+                                  .filter(Boolean)
+                                  .join(", ")
+                              : rawValue && typeof rawValue === "object" && !Array.isArray(rawValue) && "value" in rawValue
+                                ? formatBooleanWithDetails(rawValue as BooleanWithDetails)
+                                : "";
+                        if (!display) return null;
+                        return (
+                          <div
+                            key={spec.id || specName}
+                            className="flex border-b border-white/5 last:border-b-0"
+                          >
+                            <div className="w-1/3 font-medium text-gray-400 p-3 text-sm capitalize">
+                              {specName.replace(/_/g, " ")}
+                            </div>
+                            <div className="w-2/3 text-gray-900 dark:text-white p-3 text-sm">
+                              {display}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  );
+                })
+              )}
+            </div>
+            {displayAffiliates.length > 0 && (
+              <footer className="flex flex-col sm:flex-row flex-wrap items-center sm:items-center sm:justify-end gap-3 pt-6 border-t border-white/10">
+                {primaryAffiliate && (
+                  <a
+                    href={primaryAffiliate.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-full sm:w-auto inline-flex items-center justify-center rounded-lg bg-amber-500 px-6 py-3.5 text-base font-semibold text-gray-900 hover:bg-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400 focus:ring-offset-2 dark:focus:ring-offset-gray-900 transition-colors"
+                  >
+                    {getButtonLabel(primaryAffiliate, config.affiliatePriceOverrides?.[primaryAffiliate.retailer])}
+                  </a>
+                )}
+                {secondaryAffiliates.length > 0 && (
+                  <div className="flex flex-col sm:flex-row flex-wrap gap-2 w-full sm:w-auto justify-center sm:justify-end">
+                    {secondaryAffiliates.slice(0, 3).map((link) => (
+                      <a
+                        key={link.retailer}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="w-full sm:w-auto rounded-md border border-white/20 bg-white/5 px-3 py-2.5 text-sm font-medium text-gray-700 dark:text-gray-300 hover:bg-white/10 dark:hover:bg-slate-700/50 transition-colors text-center"
+                      >
+                        {getButtonLabel(link, config.affiliatePriceOverrides?.[link.retailer])}
+                      </a>
+                    ))}
+                    {secondaryAffiliates.length > 3 && (
+                      <span className="text-xs text-gray-500 dark:text-gray-400 px-1 self-center sm:self-auto">
+                        +{secondaryAffiliates.length - 3} more
+                      </span>
+                    )}
+                  </div>
+                )}
+              </footer>
+            )}
+          </>
+        ) : (
+          <>
         {/* Row 1: Editorial Hero — Image | Narrative | Validation */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 mb-8">
           {/* Column 1: Identity — Product Image */}
@@ -302,24 +454,24 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
         </div>
 
         {/* Row 2: Data Grid — KEY SPECS | BREAKDOWN (mobile: Breakdown first, then Specs) */}
-        {(showSpecsAttr || showBreakdownAttr) && (keySpecsToShow.length > 0 || subScoreEntries.length > 0) && (
+        {(showSpecsAttr || showBreakdownAttr) && (keySpecsDisplay.length > 0 || subScoreEntries.length > 0) && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 border-t border-white/10 pt-8">
-            {/* KEY SPECS — on md order-1 (left); on mobile order-2 (after Breakdown); full width if no breakdown */}
-            {showSpecsAttr && keySpecsToShow.length > 0 && (
+            {/* KEY SPECS — combined by group when template has SpecGroup[]; else flat list */}
+            {showSpecsAttr && keySpecsDisplay.length > 0 && (
               <div className={showBreakdownAttr ? "md:order-1 order-2" : "md:col-span-2"}>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">
                   KEY SPECS
                 </h3>
                 <dl className="space-y-0">
-                  {keySpecsToShow.map(({ key, value }) => (
+                  {keySpecsDisplay.map(({ label, value }) => (
                     <div
-                      key={key}
+                      key={label}
                       className="flex justify-between items-baseline py-2 border-b border-white/10 last:border-b-0"
                     >
                       <dt className="text-sm font-medium text-gray-500 dark:text-gray-400 capitalize">
-                        {key.replace(/_/g, " ")}
+                        {label.replace(/_/g, " ")}
                       </dt>
-                      <dd className="text-sm font-medium text-gray-900 dark:text-white">
+                      <dd className="text-sm font-medium text-gray-900 dark:text-white whitespace-pre-line">
                         {value}
                       </dd>
                     </div>
@@ -487,6 +639,8 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
               </div>
             )}
           </footer>
+        )}
+          </>
         )}
       </div>
     </article>

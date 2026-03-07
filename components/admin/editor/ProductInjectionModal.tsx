@@ -8,6 +8,7 @@ import { getCategories } from "@/lib/actions/categories";
 import { getAwards, getAwardById } from "@/lib/actions/award";
 import type { ProductAwardRecord } from "@/lib/types/award";
 import type { Product } from "@/lib/types/product";
+import { getFlattenedSpecs } from "@/lib/types/product";
 import type { ProductBoxConfig, ProductBoxImageType, ProductBoxTemplate } from "./extensions/ProductBox";
 import { DEFAULT_PRODUCT_BOX_CONFIG } from "./extensions/ProductBox";
 import { ProductForm } from "@/components/admin/ProductForm";
@@ -17,8 +18,8 @@ const SEARCH_DEBOUNCE_MS = 300;
 
 /** Full product context: from search selection or from fetch in edit mode. */
 function getSpecKeys(product: Product | null): string[] {
-  if (!product?.specs || typeof product.specs !== "object") return [];
-  return Object.keys(product.specs).filter(Boolean);
+  const flat = getFlattenedSpecs(product?.specs);
+  return Object.keys(flat).filter(Boolean);
 }
 
 /** Affiliate retailer keys for checklist (array: retailer; record: key). */

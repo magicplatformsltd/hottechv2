@@ -4,7 +4,10 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { upsertProduct } from "@/lib/actions/product";
-import type { Product, ProductSpecs, EditorialData, ProductTemplate, AffiliateLink } from "@/lib/types/product";
+import type { Product, ProductSpecsNested, EditorialData, ProductTemplate, AffiliateLink, VariantMatrixEntry, BooleanWithDetails } from "@/lib/types/product";
+import type { ProductSpecsInput } from "@/lib/types/product";
+import { getSpecLabelsFromSchema, getTemplateSchemaAsGroups } from "@/lib/types/template";
+import type { SpecGroup, SpecItem } from "@/lib/types/template";
 import { CURRENCY_OPTIONS, DEFAULT_CURRENCY_CODE } from "@/lib/constants/currencies";
 import type { ProductAwardRecord } from "@/lib/types/award";
 import type { CategoryRow } from "@/lib/actions/categories";
@@ -65,7 +68,6 @@ function normalizeAffiliateLinks(links: Product["affiliate_links"]): AffiliateLi
   return [];
 }
 
-type SpecEntry = { key: string; value: string };
 type SubScoreEntry = { label: string; value: number };
 
 function emptyProduct(): Partial<Product> {
@@ -82,19 +84,74 @@ function emptyProduct(): Partial<Product> {
   };
 }
 
-function specsToEntries(specs: ProductSpecs): SpecEntry[] {
-  const entries = Object.entries(specs ?? {}).map(([key, value]) => ({
-    key,
-    value: String(value ?? ""),
-  }));
-  return entries.length ? entries : [{ key: "", value: "" }];
+/** Detect if specs are stored in nested shape (group -> spec -> value). */
+function isNestedSpecs(specs: ProductSpecsInput | null | undefined): specs is ProductSpecsNested {
+  if (!specs || typeof specs !== "object") return false;
+  const first = Object.values(specs)[0];
+  return typeof first === "object" && first !== null && !Array.isArray(first);
 }
 
-function entriesToSpecs(entries: SpecEntry[]): ProductSpecs {
-  const out: ProductSpecs = {};
-  for (const { key, value } of entries) {
-    const k = key.trim();
-    if (k) out[k] = value.trim();
+/**
+ * Build nested spec state from product data and template schema.
+ * Migrates legacy flat productSpecs into the grouped structure; preserves values when switching templates.
+ */
+function initializeSpecs(
+  productSpecs: ProductSpecsInput | null | undefined,
+  templateSchema: SpecGroup[]
+): ProductSpecsNested {
+  const nested = isNestedSpecs(productSpecs) ? (productSpecs as ProductSpecsNested) : null;
+  const flat: Record<string, string> =
+    !nested && productSpecs && typeof productSpecs === "object"
+      ? (productSpecs as Record<string, string>)
+      : {};
+  // When re-applying (e.g. switching template), flatten nested so we preserve values by spec name
+  const flatFromNested: Record<string, string> = nested
+    ? Object.values(nested).reduce(
+        (acc, group) => {
+          if (group && typeof group === "object")
+            for (const [k, v] of Object.entries(group)) if (typeof v === "string") acc[k] = v;
+          return acc;
+        },
+        {} as Record<string, string>
+      )
+    : {};
+  const out: ProductSpecsNested = {};
+  for (const group of templateSchema) {
+    const groupName = group.groupName?.trim() || "General";
+    if (!out[groupName]) out[groupName] = {};
+    for (const spec of group.specs ?? []) {
+      const name = spec.name?.trim();
+      if (!name) continue;
+      const specType = spec.type ?? "text";
+      if (specType === "variant_matrix") {
+        const raw = nested?.[groupName]?.[name];
+        const arr = Array.isArray(raw)
+          ? (raw as VariantMatrixEntry[]).map((x) => ({
+              ram: typeof x?.ram === "string" ? x.ram : "",
+              storage: typeof x?.storage === "string" ? x.storage : "",
+            }))
+          : [{ ram: "", storage: "" }];
+        out[groupName][name] = arr.length > 0 ? arr : [{ ram: "", storage: "" }];
+      } else if (specType === "boolean") {
+        const raw = nested?.[groupName]?.[name];
+        const obj =
+          raw &&
+          typeof raw === "object" &&
+          !Array.isArray(raw) &&
+          "value" in raw &&
+          typeof (raw as BooleanWithDetails).value === "boolean"
+            ? (raw as BooleanWithDetails)
+            : { value: false, details: "" };
+        out[groupName][name] = {
+          value: Boolean(obj.value),
+          details: typeof obj.details === "string" ? obj.details : "",
+        };
+      } else {
+        const value =
+          nested?.[groupName]?.[name] ?? flat[name] ?? flatFromNested[name] ?? "";
+        out[groupName][name] = typeof value === "string" ? String(value ?? "").trim() : "";
+      }
+    }
   }
   return out;
 }
@@ -143,8 +200,11 @@ export function ProductForm({ product, templates = [], categories = [], awards =
   const [transparentImage, setTransparentImage] = useState<string | null>(
     initial.transparent_image ?? null
   );
-  const [specEntries, setSpecEntries] = useState<SpecEntry[]>(() =>
-    specsToEntries(initial.specs ?? {})
+  const [specGroups, setSpecGroups] = useState<ProductSpecsNested>(() =>
+    initializeSpecs(
+      initial.specs ?? {},
+      getTemplateSchemaAsGroups(templates.find((t) => t.id === (initial.template_id ?? ""))?.spec_schema)
+    )
   );
   const [bottomLine, setBottomLine] = useState(
     initial.editorial_data?.bottom_line ?? ""
@@ -185,30 +245,13 @@ export function ProductForm({ product, templates = [], categories = [], awards =
 
   const applyTemplateSchema = useCallback(
     (template: ProductTemplate) => {
-      const specLabels = Array.isArray(template.spec_schema)
-        ? template.spec_schema.filter((s): s is string => typeof s === "string" && String(s).trim() !== "")
-        : [];
       const scoreLabels = Array.isArray(template.score_schema)
         ? template.score_schema.filter((s): s is string => typeof s === "string" && String(s).trim() !== "")
         : [];
 
-      setSpecEntries((prev) => {
-        const existingByKey = Object.fromEntries(
-          prev.filter((e) => e.key.trim()).map((e) => [e.key.trim(), e.value])
-        );
-        const templateKeySet = new Set(specLabels);
-        const next: SpecEntry[] = specLabels.map((label) => ({
-          key: String(label),
-          value: existingByKey[label] ?? "",
-        }));
-        for (const e of prev) {
-          const k = e.key.trim();
-          if (k && !templateKeySet.has(k)) {
-            next.push({ key: e.key, value: e.value });
-          }
-        }
-        return next.length ? next : [{ key: "", value: "" }];
-      });
+      setSpecGroups((prev) =>
+        initializeSpecs(prev, getTemplateSchemaAsGroups(template.spec_schema))
+      );
 
       setSubScores((prev) => {
         const existingScores: Record<string, number> = {};
@@ -262,19 +305,84 @@ export function ProductForm({ product, templates = [], categories = [], awards =
     setSlugManuallyEdited(false);
   }, [name]);
 
-  const addSpec = useCallback(() => {
-    setSpecEntries((prev) => [...prev, { key: "", value: "" }]);
+  const updateSpecValue = useCallback((groupName: string, specName: string, value: string) => {
+    setSpecGroups((prev) => ({
+      ...prev,
+      [groupName]: {
+        ...prev[groupName],
+        [specName]: value,
+      },
+    }));
   }, []);
 
-  const updateSpec = useCallback((index: number, field: "key" | "value", value: string) => {
-    setSpecEntries((prev) =>
-      prev.map((e, i) => (i === index ? { ...e, [field]: value } : e))
-    );
+  const updateVariantMatrix = useCallback(
+    (groupName: string, specName: string, index: number, field: "ram" | "storage", value: string) => {
+      setSpecGroups((prev) => {
+        const group = prev[groupName] ?? {};
+        const raw = group[specName];
+        const arr = Array.isArray(raw)
+          ? (raw as VariantMatrixEntry[]).map((x) => ({ ram: x.ram ?? "", storage: x.storage ?? "" }))
+          : [{ ram: "", storage: "" }];
+        const next = [...arr];
+        if (index >= 0 && index < next.length) {
+          next[index] = { ...next[index], [field]: value };
+        }
+        return {
+          ...prev,
+          [groupName]: { ...group, [specName]: next },
+        };
+      });
+    },
+    []
+  );
+
+  const addVariantMatrixRow = useCallback((groupName: string, specName: string) => {
+    setSpecGroups((prev) => {
+      const group = prev[groupName] ?? {};
+      const raw = group[specName];
+      const arr = Array.isArray(raw)
+        ? [...(raw as VariantMatrixEntry[]), { ram: "", storage: "" }]
+        : [{ ram: "", storage: "" }];
+      return { ...prev, [groupName]: { ...group, [specName]: arr } };
+    });
   }, []);
 
-  const removeSpec = useCallback((index: number) => {
-    setSpecEntries((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
+  const removeVariantMatrixRow = useCallback((groupName: string, specName: string, index: number) => {
+    setSpecGroups((prev) => {
+      const group = prev[groupName] ?? {};
+      const raw = group[specName];
+      const arr = Array.isArray(raw) ? (raw as VariantMatrixEntry[]) : [];
+      const next = arr.filter((_, i) => i !== index);
+      return {
+        ...prev,
+        [groupName]: { ...group, [specName]: next.length > 0 ? next : [{ ram: "", storage: "" }] },
+      };
+    });
   }, []);
+
+  const updateBooleanSpec = useCallback(
+    (groupName: string, specName: string, update: Partial<BooleanWithDetails>) => {
+      setSpecGroups((prev) => {
+        const group = prev[groupName] ?? {};
+        const raw = group[specName];
+        const current: BooleanWithDetails =
+          raw && typeof raw === "object" && !Array.isArray(raw) && "value" in raw
+            ? { value: Boolean((raw as BooleanWithDetails).value), details: String((raw as BooleanWithDetails).details ?? "") }
+            : { value: false, details: "" };
+        return {
+          ...prev,
+          [groupName]: {
+            ...group,
+            [specName]: {
+              value: update.value !== undefined ? update.value : current.value,
+              details: update.details !== undefined ? update.details : current.details,
+            },
+          },
+        };
+      });
+    },
+    []
+  );
 
   const addPro = useCallback(() => setPros((prev) => [...prev, ""]), []);
   const updatePro = useCallback((index: number, value: string) => {
@@ -381,7 +489,7 @@ export function ProductForm({ product, templates = [], categories = [], awards =
       seo_title: seoTitle.trim() || null,
       seo_description: seoDescription.trim() || null,
       award_id: awardId.trim() || null,
-      specs: entriesToSpecs(specEntries),
+      specs: specGroups,
       affiliate_links: linksPayload,
       editorial_data: editorialData,
     };
@@ -650,46 +758,143 @@ export function ProductForm({ product, templates = [], categories = [], awards =
         {hasTemplate && (
           <div className="space-y-8 lg:col-span-7">
             <section className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="font-sans text-lg font-medium text-hot-white">
-                  Specs
-                </h2>
-                <button
-                  type="button"
-                  onClick={addSpec}
-                  className="rounded-md border border-white/20 bg-white/5 px-3 py-1.5 font-sans text-sm text-gray-400 hover:bg-white/10 hover:text-hot-white"
-                >
-                  Add Spec
-                </button>
-              </div>
-              <div className="space-y-2">
-                {specEntries.map((entry, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <input
-                      type="text"
-                      value={entry.key}
-                      onChange={(e) => updateSpec(i, "key", e.target.value)}
-                      className={`${inputClass} flex-1`}
-                      placeholder="e.g. CPU"
-                    />
-                    <input
-                      type="text"
-                      value={entry.value}
-                      onChange={(e) => updateSpec(i, "value", e.target.value)}
-                      className={`${inputClass} flex-1`}
-                      placeholder="e.g. Snapdragon 8 Gen 3"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => removeSpec(i)}
-                      className="shrink-0 rounded px-2 py-1.5 text-sm text-red-400 hover:bg-red-500/10"
-                      aria-label="Remove spec"
-                    >
-                      Remove
-                    </button>
+              <h2 className="font-sans text-lg font-medium text-hot-white">
+                Specs
+              </h2>
+              {(() => {
+                const schemaGroups = getTemplateSchemaAsGroups(selectedTemplate?.spec_schema);
+                if (schemaGroups.length === 0) return null;
+                return (
+                  <div className="space-y-6">
+                    {schemaGroups.map((group, idx) => (
+                      <div key={group.id || group.groupName}>
+                        <h4 className={`font-bold mb-2 text-hot-white ${idx === 0 ? "mt-0" : "mt-6"}`}>
+                          {group.groupName || "General"}
+                        </h4>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          {(group.specs ?? []).map((spec) => {
+                            const groupName = group.groupName?.trim() || "General";
+                            const specName = spec.name?.trim();
+                            if (!specName) return null;
+                            const specType = (spec as SpecItem).type ?? "text";
+                            if (specType === "variant_matrix") {
+                              const raw = specGroups[groupName]?.[specName];
+                              const entries: VariantMatrixEntry[] = Array.isArray(raw)
+                                ? (raw as VariantMatrixEntry[]).map((x) => ({
+                                    ram: typeof x?.ram === "string" ? x.ram : "",
+                                    storage: typeof x?.storage === "string" ? x.storage : "",
+                                  }))
+                                : [{ ram: "", storage: "" }];
+                              return (
+                                <div key={spec.id || specName} className="md:col-span-2 space-y-2">
+                                  <label className={labelClass}>{specName}</label>
+                                  <div className="space-y-2">
+                                    {entries.map((entry, idx) => (
+                                      <div
+                                        key={idx}
+                                        className="grid grid-cols-12 gap-2 items-center rounded border border-white/10 bg-white/5 p-2"
+                                      >
+                                        <input
+                                          type="text"
+                                          value={entry.ram}
+                                          onChange={(e) =>
+                                            updateVariantMatrix(groupName, specName, idx, "ram", e.target.value)
+                                          }
+                                          className={`${inputClass} col-span-5`}
+                                          placeholder="e.g. 8GB"
+                                        />
+                                        <input
+                                          type="text"
+                                          value={entry.storage}
+                                          onChange={(e) =>
+                                            updateVariantMatrix(groupName, specName, idx, "storage", e.target.value)
+                                          }
+                                          className={`${inputClass} col-span-5`}
+                                          placeholder="e.g. 256GB"
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => removeVariantMatrixRow(groupName, specName, idx)}
+                                          className="col-span-2 rounded px-2 py-1.5 text-sm text-red-400 hover:bg-red-500/10"
+                                          aria-label="Remove configuration"
+                                        >
+                                          Remove
+                                        </button>
+                                      </div>
+                                    ))}
+                                    <button
+                                      type="button"
+                                      onClick={() => addVariantMatrixRow(groupName, specName)}
+                                      className="rounded-md border border-white/20 bg-white/5 px-3 py-1.5 font-sans text-sm text-gray-400 hover:bg-white/10 hover:text-hot-white"
+                                    >
+                                      + Add Configuration
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            if (specType === "boolean") {
+                              const raw = specGroups[groupName]?.[specName];
+                              const boolVal: BooleanWithDetails =
+                                raw && typeof raw === "object" && !Array.isArray(raw) && "value" in raw
+                                  ? {
+                                      value: Boolean((raw as BooleanWithDetails).value),
+                                      details: String((raw as BooleanWithDetails).details ?? ""),
+                                    }
+                                  : { value: false, details: "" };
+                              return (
+                                <div key={spec.id || specName} className="flex flex-col gap-2">
+                                  <label className={labelClass}>{specName}</label>
+                                  <div className="flex flex-wrap items-center gap-3">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={boolVal.value}
+                                        onChange={(e) =>
+                                          updateBooleanSpec(groupName, specName, { value: e.target.checked })
+                                        }
+                                        className="rounded border-white/20"
+                                      />
+                                      <span className="text-sm text-gray-400">Yes / No</span>
+                                    </label>
+                                    {boolVal.value && (
+                                      <input
+                                        type="text"
+                                        value={boolVal.details}
+                                        onChange={(e) =>
+                                          updateBooleanSpec(groupName, specName, { details: e.target.value })
+                                        }
+                                        className={inputClass}
+                                        placeholder="Optional details (e.g., 15W Qi2)"
+                                      />
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            }
+                            const value = specGroups[groupName]?.[specName];
+                            const textValue = typeof value === "string" ? value : "";
+                            return (
+                              <div key={spec.id || specName}>
+                                <label className={labelClass}>{specName}</label>
+                                <input
+                                  type="text"
+                                  value={textValue}
+                                  onChange={(e) =>
+                                    updateSpecValue(groupName, specName, e.target.value)
+                                  }
+                                  className={inputClass}
+                                  placeholder={`e.g. ${specName}`}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
+                );
+              })()}
             </section>
 
             <section className="space-y-4">

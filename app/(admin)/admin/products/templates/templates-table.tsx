@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import type { ProductTemplate } from "@/lib/types/product";
+import { getSpecLabelsFromSchema } from "@/lib/types/template";
 import { deleteTemplate } from "@/lib/actions/template";
 
 function TemplateRowActions({ id }: { id: string }) {
@@ -67,7 +68,7 @@ export function TemplatesTable({ templates }: TemplatesTableProps) {
             {template.slug || "—"}
           </td>
           <td className="w-24 shrink-0 px-4 py-3 text-gray-400">
-            {Array.isArray(template.spec_schema) ? template.spec_schema.length : 0}
+            {getSpecLabelsFromSchema(template.spec_schema).length}
           </td>
           <td className="w-24 shrink-0 px-4 py-3 text-gray-400">
             {Array.isArray(template.score_schema) ? template.score_schema.length : 0}

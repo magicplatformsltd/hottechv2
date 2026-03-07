@@ -6,6 +6,7 @@ import { getProductById } from "@/lib/actions/product";
 import { getTemplateById } from "@/lib/actions/template";
 import { getAwardById } from "@/lib/actions/award";
 import type { Product } from "@/lib/types/product";
+import { getFlattenedSpecs } from "@/lib/types/product";
 import type { ProductTemplate } from "@/lib/types/product";
 import type { ProductBoxBlockData } from "@/lib/types/post";
 import { AwardBadge } from "./AwardBadge";
@@ -143,7 +144,7 @@ export function ProductCard({ data, className = "" }: ProductCardProps) {
         : allAffiliates
       : [];
 
-  const specs = product.specs && typeof product.specs === "object" ? product.specs : {};
+  const specs = getFlattenedSpecs(product.specs);
   const displaySpecs =
     showKeySpecs && keySpecKeysToShow.length > 0
       ? keySpecKeysToShow.filter((k) => k in specs).map((k) => ({ key: k, value: specs[k] }))
