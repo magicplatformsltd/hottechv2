@@ -12,6 +12,8 @@ type ProductFormProps = {
   product: Product | null;
   templates?: ProductTemplate[];
   categories?: CategoryRow[];
+  /** When provided, called after successful save instead of redirecting to /admin/products. */
+  onSuccess?: () => void;
 };
 
 type CategoryOption = { id: number; label: string };
@@ -99,7 +101,7 @@ function slugify(text: string): string {
     || "";
 }
 
-export function ProductForm({ product, templates = [], categories = [] }: ProductFormProps) {
+export function ProductForm({ product, templates = [], categories = [], onSuccess }: ProductFormProps) {
   const router = useRouter();
   const initial = product ?? emptyProduct();
 
@@ -360,7 +362,11 @@ export function ProductForm({ product, templates = [], categories = [] }: Produc
       setError(result.error);
       return;
     }
-    router.push("/admin/products");
+    if (onSuccess) {
+      onSuccess();
+    } else {
+      router.push("/admin/products");
+    }
   }
 
   const inputClass =
@@ -369,8 +375,6 @@ export function ProductForm({ product, templates = [], categories = [] }: Produc
   const textareaClass = `${inputClass} min-h-[100px] resize-y`;
 
   const hasTemplate = Boolean(templateId.trim());
-
-  console.log("Current SubScores State:", subScores);
 
   return (
     <form onSubmit={handleSubmit} className="space-y-8">

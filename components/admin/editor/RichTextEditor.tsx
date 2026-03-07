@@ -14,6 +14,9 @@ import { ImageGalleryExtension } from "./extensions/ImageGallery";
 import { ImageComparisonExtension } from "./extensions/ImageComparison";
 import { PullQuoteExtension } from "./extensions/PullQuote";
 import { KeyTakeawaysExtension } from "./extensions/KeyTakeaways";
+import { ProductBoxExtension, PRODUCT_BOX_EDIT_EVENT } from "./extensions/ProductBox";
+import { ProductInjectionModal } from "./ProductInjectionModal";
+import type { ProductBoxConfig } from "./extensions/ProductBox";
 import {
   Bold,
   Italic,
@@ -31,6 +34,7 @@ import {
   FileText,
   Share2,
   Handshake,
+  Package,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { MediaPickerModal } from "@/app/components/admin/media/MediaPickerModal";
@@ -39,6 +43,7 @@ import { SponsorBlockModal } from "@/app/components/admin/posts/SponsorBlockModa
 import type { PostPickerPost } from "@/lib/actions/post-picker";
 import type { SponsorBlockData } from "@/lib/types/post";
 import { DEFAULT_SPONSOR_BLOCK_DATA, DEFAULT_PULL_QUOTE_DATA, DEFAULT_KEY_TAKEAWAYS_DATA } from "@/lib/types/post";
+import { linkProductToPost } from "@/lib/actions/product";
 
 function getYoutubeId(url: string): string | null {
   const trimmed = url.trim();
@@ -93,6 +98,8 @@ type RichTextEditorProps = {
   onChange?: (html: string) => void;
   placeholder?: string;
   className?: string;
+  /** When set (e.g. in post editor), product box insert/update will also link this product to the post. */
+  postId?: string | null;
 };
 
 export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorProps>(function RichTextEditor({
@@ -100,12 +107,20 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
   onChange,
   placeholder = "Write your story…",
   className,
+  postId,
 }, ref) {
   const [imagePickerOpen, setImagePickerOpen] = useState(false);
   const [postPickerOpen, setPostPickerOpen] = useState(false);
   const [sponsorModalOpen, setSponsorModalOpen] = useState(false);
   const [sponsorModalInitialData, setSponsorModalInitialData] = useState<SponsorBlockData>(DEFAULT_SPONSOR_BLOCK_DATA);
   const sponsorEditPositionRef = useRef<number | null>(null);
+  const [productModalOpen, setProductModalOpen] = useState(false);
+  const [productEditState, setProductEditState] = useState<{
+    productId: string;
+    productName: string;
+    config: ProductBoxConfig;
+  } | null>(null);
+  const productEditPositionRef = useRef<number | null>(null);
 
   const editor = useEditor({
     immediatelyRender: false,
@@ -122,6 +137,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
       ImageComparisonExtension,
       PullQuoteExtension,
       KeyTakeawaysExtension,
+      ProductBoxExtension,
       Link.configure({ openOnClick: false, HTMLAttributes: { class: "text-hot-blue underline" } }),
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       Placeholder.configure({ placeholder }),
@@ -265,6 +281,52 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
     setSponsorModalOpen(true);
   }, []);
 
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ev = e as CustomEvent<{
+        productId: string;
+        productName: string;
+        config: ProductBoxConfig;
+        position: number;
+      }>;
+      const { productId, productName, config, position } = ev.detail ?? {};
+      if (productId == null || typeof position !== "number") return;
+      setProductEditState({ productId, productName: productName ?? "", config: config ?? {} });
+      productEditPositionRef.current = position;
+      setProductModalOpen(true);
+    };
+    window.addEventListener(PRODUCT_BOX_EDIT_EVENT, handler);
+    return () => window.removeEventListener(PRODUCT_BOX_EDIT_EVENT, handler);
+  }, []);
+
+  const handleProductInsert = useCallback(
+    async (payload: { productId: string; productName: string; config: ProductBoxConfig }) => {
+      if (!editor) return;
+      const pos = productEditPositionRef.current;
+      if (pos != null) {
+        editor
+          .chain()
+          .focus()
+          .setNodeSelection(pos)
+          .updateAttributes("productBox", {
+            productId: payload.productId,
+            productName: payload.productName,
+            config: JSON.stringify(payload.config),
+          })
+          .run();
+        productEditPositionRef.current = null;
+      } else {
+        editor.chain().focus().setProductBox(payload).run();
+      }
+      setProductModalOpen(false);
+      setProductEditState(null);
+      if (postId?.trim() && payload.productId?.trim()) {
+        await linkProductToPost(postId.trim(), payload.productId.trim());
+      }
+    },
+    [editor, postId]
+  );
+
   if (!editor) return null;
 
   return (
@@ -356,6 +418,16 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
           <Handshake className="h-4 w-4" />
         </ToolbarButton>
         <ToolbarButton
+          onClick={() => {
+            productEditPositionRef.current = null;
+            setProductEditState(null);
+            setProductModalOpen(true);
+          }}
+          title="Product box"
+        >
+          <Package className="h-4 w-4" />
+        </ToolbarButton>
+        <ToolbarButton
           onClick={() => editor.chain().focus().setPullQuote(DEFAULT_PULL_QUOTE_DATA).run()}
           title="Pull quote"
         >
@@ -370,7 +442,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
       </div>
       <EditorContent
         editor={editor}
-        className="prose prose-invert max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_h1]:text-3xl [&_h2]:text-2xl [&_h3]:text-xl [&_.ProseMirror_img]:max-w-full [&_.ProseMirror_img]:h-auto [&_.ProseMirror_img]:rounded-md [&_.content-card]:my-4 [&_.youtube-embed]:my-4 [&_[data-type=sponsor-block]]:my-4 [&_[data-type=image-gallery]]:my-4 [&_[data-type=image-comparison]]:my-4 [&_[data-type=pull-quote]]:my-4 [&_[data-type=key-takeaways]]:my-4"
+        className="prose prose-invert max-w-none [&_ul]:list-disc [&_ul]:pl-5 [&_ol]:list-decimal [&_ol]:pl-5 [&_h1]:text-3xl [&_h2]:text-2xl [&_h3]:text-xl [&_.ProseMirror_img]:max-w-full [&_.ProseMirror_img]:h-auto [&_.ProseMirror_img]:rounded-md [&_.content-card]:my-4 [&_.youtube-embed]:my-4 [&_[data-type=sponsor-block]]:my-4 [&_[data-type=image-gallery]]:my-4 [&_[data-type=image-comparison]]:my-4 [&_[data-type=pull-quote]]:my-4 [&_[data-type=key-takeaways]]:my-4 [&_[data-type=product-box]]:my-4"
       />
 
       <MediaPickerModal
@@ -402,6 +474,16 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         }}
         onSave={handleSponsorSave}
         initialData={sponsorModalInitialData}
+      />
+      <ProductInjectionModal
+        isOpen={productModalOpen}
+        onClose={() => {
+          setProductModalOpen(false);
+          setProductEditState(null);
+          productEditPositionRef.current = null;
+        }}
+        onInsert={handleProductInsert}
+        editState={productEditState}
       />
     </div>
   );

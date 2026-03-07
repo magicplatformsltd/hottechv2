@@ -7,12 +7,14 @@ import type {
   ImageComparisonData,
   PullQuoteData,
   KeyTakeawaysData,
+  ProductBoxBlockData,
 } from "@/lib/types/post";
 import { SponsorBlock } from "@/components/posts/SponsorBlock";
 import { ImageGalleryBlock } from "@/components/posts/ImageGalleryBlock";
 import { ImageComparisonBlock } from "@/components/posts/ImageComparisonBlock";
 import { PullQuoteBlock } from "@/components/posts/PullQuoteBlock";
 import { KeyTakeawaysBlock } from "@/components/posts/KeyTakeawaysBlock";
+import { ProductCard } from "@/components/public/ProductCard";
 
 export type RenderedBlock =
   | { type: "html"; content: string }
@@ -20,7 +22,8 @@ export type RenderedBlock =
   | { type: "imageGallery"; data: ImageGalleryData }
   | { type: "imageComparison"; data: ImageComparisonData }
   | { type: "pullQuote"; data: PullQuoteData }
-  | { type: "keyTakeaways"; data: KeyTakeawaysData };
+  | { type: "keyTakeaways"; data: KeyTakeawaysData }
+  | { type: "productBox"; data: ProductBoxBlockData };
 
 type BlockRendererProps = {
   blocks: RenderedBlock[];
@@ -71,6 +74,9 @@ export function BlockRenderer({
             break;
           case "keyTakeaways":
             content = <KeyTakeawaysBlock key={i} data={block.data} />;
+            break;
+          case "productBox":
+            content = <ProductCard key={i} data={block.data} className="my-4" />;
             break;
           case "html":
           default:

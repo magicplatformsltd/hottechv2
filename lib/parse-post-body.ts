@@ -4,6 +4,8 @@ import type {
   ImageComparisonData,
   PullQuoteData,
   KeyTakeawaysData,
+  ProductBoxBlockData,
+  ProductBoxBlockConfig,
 } from "@/lib/types/post";
 import { DEFAULT_PULL_QUOTE_DATA } from "@/lib/types/post";
 import { DEFAULT_SPONSOR_BLOCK_DATA } from "@/lib/types/post";
@@ -14,7 +16,8 @@ export type PostBodySegment =
   | { type: "imageGallery"; data: ImageGalleryData }
   | { type: "imageComparison"; data: ImageComparisonData }
   | { type: "pullQuote"; data: PullQuoteData }
-  | { type: "keyTakeaways"; data: KeyTakeawaysData };
+  | { type: "keyTakeaways"; data: KeyTakeawaysData }
+  | { type: "productBox"; data: ProductBoxBlockData };
 
 /** Decode HTML entities in attribute value so JSON.parse works. */
 function decodeAttrValue(s: string): string {
@@ -206,8 +209,96 @@ function extractPullQuoteAndKeyTakeaways(html: string): PullQuoteKeyTakeawaysSeg
   return result;
 }
 
+/** Find the end index of the div starting at startIndex (after the opening tag). */
+function findMatchingDivEnd(html: string, startIndex: number): number {
+  let depth = 1;
+  let i = startIndex;
+  const len = html.length;
+  while (i < len && depth > 0) {
+    const open = html.indexOf("<div", i);
+    const close = html.indexOf("</div>", i);
+    if (close === -1) break;
+    if (open !== -1 && open < close) {
+      depth++;
+      i = open + 4;
+    } else {
+      depth--;
+      if (depth === 0) return close + 6;
+      i = close + 6;
+    }
+  }
+  return startIndex;
+}
+
+/** Extract product-box blocks from HTML. */
+function extractProductBoxBlocks(html: string): { index: number; data: ProductBoxBlockData; length: number }[] {
+  const blocks: { index: number; data: ProductBoxBlockData; length: number }[] = [];
+  const productBoxOpenRegex = /<div\s[^>]*data-type="product-box"[^>]*>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = productBoxOpenRegex.exec(html)) !== null) {
+    const tag = m[0];
+    const idMatch = tag.match(/data-product-id="([^"]*)"/);
+    const nameMatch = tag.match(/data-product-name="([^"]*)"/);
+    const configMatch = tag.match(/data-product-config="((?:[^"\\]|\\.)*)"/);
+    const productId = idMatch?.[1] ?? "";
+    const productName = nameMatch?.[1] ?? "";
+    let config: ProductBoxBlockConfig = {};
+    if (configMatch?.[1]) {
+      try {
+        config = JSON.parse(decodeAttrValue(configMatch[1].replace(/\\"/g, '"'))) as ProductBoxBlockConfig;
+      } catch {
+        /* use empty config */
+      }
+    }
+    const endTagStart = m.index + tag.length;
+    const endIndex = findMatchingDivEnd(html, endTagStart);
+    const length = endIndex - m.index;
+    blocks.push({
+      index: m.index,
+      data: { productId, productName, config },
+      length,
+    });
+  }
+  return blocks;
+}
+
+type WithProductBoxSegment =
+  | { type: "html"; content: string }
+  | { type: "imageGallery"; data: ImageGalleryData }
+  | { type: "imageComparison"; data: ImageComparisonData }
+  | { type: "pullQuote"; data: PullQuoteData }
+  | { type: "keyTakeaways"; data: KeyTakeawaysData }
+  | { type: "productBox"; data: ProductBoxBlockData };
+
+function extractProductBoxSegments(segments: PullQuoteKeyTakeawaysSegment[]): WithProductBoxSegment[] {
+  const result: WithProductBoxSegment[] = [];
+  for (const seg of segments) {
+    if (seg.type !== "html" || !seg.content) {
+      result.push(seg as WithProductBoxSegment);
+      continue;
+    }
+    const blocks = extractProductBoxBlocks(seg.content);
+    if (blocks.length === 0) {
+      result.push(seg as WithProductBoxSegment);
+      continue;
+    }
+    let lastIndex = 0;
+    for (const block of blocks) {
+      if (block.index > lastIndex) {
+        result.push({ type: "html", content: seg.content.slice(lastIndex, block.index) });
+      }
+      result.push({ type: "productBox", data: block.data });
+      lastIndex = block.index + block.length;
+    }
+    if (lastIndex < seg.content.length) {
+      result.push({ type: "html", content: seg.content.slice(lastIndex) });
+    }
+  }
+  return result;
+}
+
 /**
- * Parse post body HTML into segments: raw HTML, sponsor, image gallery, image comparison, pull quote, key takeaways.
+ * Parse post body HTML into segments: raw HTML, sponsor, image gallery, image comparison, pull quote, key takeaways, product box.
  * Use with BlockRenderer so custom blocks render as their respective React components.
  */
 export function parsePostBody(html: string): PostBodySegment[] {
@@ -220,9 +311,11 @@ export function parsePostBody(html: string): PostBodySegment[] {
       const gallerySegments = extractGalleryAndComparisonBlocks(seg.content);
       for (const g of gallerySegments) {
         if (g.type === "html" && g.content) {
-          result.push(...extractPullQuoteAndKeyTakeaways(g.content));
+          const withPullQuote = extractPullQuoteAndKeyTakeaways(g.content);
+          const withProductBox = extractProductBoxSegments(withPullQuote);
+          result.push(...(withProductBox as PostBodySegment[]));
         } else {
-          result.push(g);
+          result.push(g as PostBodySegment);
         }
       }
     } else if (seg.type === "html") {

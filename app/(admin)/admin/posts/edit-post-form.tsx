@@ -397,6 +397,7 @@ export function EditPostForm({
             onChange={setBody}
             placeholder="Write your story…"
             className="mt-2"
+            postId={post?.id ?? undefined}
           />
         </div>
         {isShowcase && (

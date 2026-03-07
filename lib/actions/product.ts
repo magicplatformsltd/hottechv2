@@ -196,6 +196,17 @@ export async function linkProductToPost(
   } = await client.auth.getUser();
   if (!user) return { error: "Unauthorized." };
 
+  const alreadyLinked = await client
+    .from("post_products")
+    .select("product_id")
+    .eq("post_id", postId.trim())
+    .eq("product_id", productId.trim())
+    .maybeSingle();
+
+  if (alreadyLinked.data) {
+    return {};
+  }
+
   const existing = await client
     .from("post_products")
     .select("product_id")

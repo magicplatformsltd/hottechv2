@@ -75,3 +75,23 @@ export type KeyTakeawaysData = {
 export const DEFAULT_KEY_TAKEAWAYS_DATA: KeyTakeawaysData = {
   items: [""],
 };
+
+/** Product box block (inline product card): config from TipTap node. */
+export type ProductBoxBlockConfig = {
+  showStarRating?: boolean;
+  showProsCons?: boolean;
+  showKeySpecs?: boolean;
+  keySpecKeys?: string[];
+  includeAffiliateButtons?: boolean;
+  selectedAffiliates?: string[];
+  showImage?: boolean;
+  imageType?: "transparent" | "hero";
+  descriptionOverride?: string;
+  showReleaseDate?: boolean;
+};
+
+export type ProductBoxBlockData = {
+  productId: string;
+  productName?: string;
+  config: ProductBoxBlockConfig;
+};
