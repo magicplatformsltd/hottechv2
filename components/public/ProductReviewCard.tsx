@@ -14,10 +14,14 @@ import { getTemplateSchemaAsGroups } from "@/lib/types/template";
 import type { SpecGroup, SpecItem } from "@/lib/types/template";
 import { getCurrencySymbol } from "@/lib/constants/currencies";
 import { AwardBadge } from "./AwardBadge";
+import { generateProductSchema } from "@/lib/schema/product-jsonld";
+import { JsonLd } from "@/components/seo/JsonLd";
 
 type ProductReviewCardProps = {
   data: ProductBoxBlockData;
   className?: string;
+  /** Optional block index for unique JSON-LD @id when multiple products on page. */
+  blockIndex?: number;
 };
 
 type AffiliateLinkDisplay = {
@@ -250,7 +254,54 @@ function getCombinedKeySpecs(
   return result;
 }
 
-export function ProductReviewCard({ data, className = "" }: ProductReviewCardProps) {
+/** Build flat spec name -> display value for JSON-LD additionalProperty. Uses same display/label logic as spec sheet. */
+function getSpecsForSchema(
+  productSpecs: ProductSpecsInput | null | undefined,
+  templateSchema: SpecGroup[]
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const group of templateSchema) {
+    const groupName = group.groupName?.trim() || "General";
+    for (const spec of group.specs ?? []) {
+      const specName = spec.name?.trim() ?? "";
+      const rawValue = getRawSpecValue(productSpecs, groupName, specName);
+      let display: string;
+      if (typeof rawValue === "string") display = rawValue.trim();
+      else if (Array.isArray(rawValue) && rawValue.length > 0 && rawValue[0] != null && "dust" in rawValue[0] && "water" in rawValue[0])
+        display = formatIpRatingForDisplay(rawValue as IpRatingEntry[]);
+      else if (Array.isArray(rawValue)) {
+        const hideLabels = (spec as SpecItem).matrixConfig?.hideLabelsPublicly === true;
+        const label1 = hideLabels ? "" : ((spec as SpecItem).matrixConfig?.col1Label ?? "");
+        const label2 = hideLabels ? "" : ((spec as SpecItem).matrixConfig?.col2Label ?? "");
+        display = (rawValue as VariantMatrixEntry[])
+          .map((item) => {
+            const v1 = (item.value1 ?? "").trim();
+            const v2 = (item.value2 ?? "").trim();
+            if (hideLabels) return v1 && v2 ? `${v1} / ${v2}` : v1 || v2;
+            if (v1 && v2) return `${v1} ${label1} / ${v2} ${label2}`.trim();
+            if (v1) return `${v1} ${label1}`.trim();
+            return `${v2} ${label2}`.trim();
+          })
+          .filter(Boolean)
+          .join(", ");
+      } else if (rawValue && typeof rawValue === "object" && !Array.isArray(rawValue) && "value" in rawValue)
+        display = formatBooleanWithDetails(rawValue as BooleanWithDetails);
+      else if (rawValue && typeof rawValue === "object" && !Array.isArray(rawValue) && "mp" in rawValue && "ois" in rawValue)
+        display = formatCameraLensForDisplay(rawValue as CameraLensData);
+      else if (rawValue && typeof rawValue === "object" && !Array.isArray(rawValue) && "hasDolbyVision" in rawValue && "hasHDR10Plus" in rawValue)
+        display = formatDisplayPanelForDisplay(rawValue as DisplayPanelData);
+      else display = "";
+      if (!display) continue;
+      let rowLabel = specName.replace(/_/g, " ");
+      if (rawValue && typeof rawValue === "object" && "displayName" in rawValue && (rawValue as { displayName?: string }).displayName)
+        rowLabel = String((rawValue as { displayName: string }).displayName).trim();
+      out[rowLabel] = display;
+    }
+  }
+  return out;
+}
+
+export function ProductReviewCard({ data, className = "", blockIndex }: ProductReviewCardProps) {
   const { productId, productName, config } = data;
   // Strict boolean: only explicit false (boolean or string "false") hides; backward compat treats undefined as show
   const isShow = (v: unknown) => v !== false && v !== "false";
@@ -399,12 +450,16 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
     (displayPros.length > 0 || displayCons.length > 0);
 
   const isSpecSheetTemplate = data.template === "spec_sheet";
+  const specsForSchema = templateSchema.length > 0 ? getSpecsForSchema(product.specs, templateSchema) : {};
+  const productSchema = generateProductSchema(product, { specsForSchema, blockIndex });
 
   return (
-    <article
-      className={`w-full rounded-xl border border-white/10 bg-white/5 dark:bg-slate-900/50 backdrop-blur-md overflow-hidden ${className}`}
-      data-product-id={product.id}
-    >
+    <>
+      <JsonLd data={productSchema} />
+      <article
+        className={`w-full rounded-xl border border-white/10 bg-white/5 dark:bg-slate-900/50 backdrop-blur-md overflow-hidden ${className}`}
+        data-product-id={product.id}
+      >
       <div className="p-5 sm:p-6">
         {isSpecSheetTemplate ? (
           <>
@@ -850,5 +905,6 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
         )}
       </div>
     </article>
+    </>
   );
 }

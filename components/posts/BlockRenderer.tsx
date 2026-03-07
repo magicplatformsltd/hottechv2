@@ -76,7 +76,7 @@ export function BlockRenderer({
             content = <KeyTakeawaysBlock key={i} data={block.data} />;
             break;
           case "productBox":
-            content = <ProductReviewCard key={i} data={block.data} className="my-6" />;
+            content = <ProductReviewCard key={i} data={block.data} className="my-6" blockIndex={i} />;
             break;
           case "html":
           default:
