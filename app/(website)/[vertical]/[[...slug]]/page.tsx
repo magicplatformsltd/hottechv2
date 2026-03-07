@@ -18,6 +18,7 @@ import {
 import { constructMetadata } from "@/lib/seo";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { ProductSpecsTable } from "@/components/public/ProductSpecsTable";
+import { ProductCard } from "@/components/ui/ProductCard";
 import { PostBody } from "@/components/posts/PostBody";
 import { ViewTracker } from "@/components/analytics/ViewTracker";
 import { getBaseUrl } from "@/lib/url";
@@ -202,6 +203,27 @@ export default async function VerticalPage({ params, searchParams: searchParamsP
         </Link>
         <h1 className="font-serif text-4xl font-bold text-hot-white mb-2">{r.template.name}</h1>
         <p className="text-gray-400 font-sans text-lg mb-10">Browse devices and latest news.</p>
+
+        {r.products.filter((p) => isPublished(p)).length > 0 && (
+          <section className="mb-12">
+            <h2 className="text-xl font-semibold text-hot-white mb-4">Featured</h2>
+            <ul className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8 items-start">
+              {r.products
+                .filter((p) => isPublished(p))
+                .slice(0, 4)
+                .map((p) => (
+                  <li key={p.id} className="w-full min-w-0">
+                    <ProductCard
+                      product={p}
+                      showRating
+                      size="md"
+                      linkPrefix={vertical}
+                    />
+                  </li>
+                ))}
+            </ul>
+          </section>
+        )}
 
         {r.products.filter((p) => isPublished(p)).length > 0 && (
           <section className="mb-12">
