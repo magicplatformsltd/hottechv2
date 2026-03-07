@@ -233,6 +233,14 @@ export function ProductForm({ product, templates = [], categories = [], awards =
   const [discontinuedDate, setDiscontinuedDate] = useState(
     (initial as { discontinued_date?: string | null }).discontinued_date?.slice(0, 10) ?? ""
   );
+  const [softwareUpdatesYears, setSoftwareUpdatesYears] = useState<string>(() => {
+    const v = (initial as { software_updates_years?: number | null }).software_updates_years;
+    return v != null && !Number.isNaN(Number(v)) ? String(v) : "";
+  });
+  const [securityUpdatesYears, setSecurityUpdatesYears] = useState<string>(() => {
+    const v = (initial as { security_updates_years?: number | null }).security_updates_years;
+    return v != null && !Number.isNaN(Number(v)) ? String(v) : "";
+  });
   const [seoTitle, setSeoTitle] = useState(initial.seo_title ?? "");
   const [seoDescription, setSeoDescription] = useState(initial.seo_description ?? "");
   const [awardId, setAwardId] = useState<string | "">(initial.award_id ?? "");
@@ -548,6 +556,14 @@ export function ProductForm({ product, templates = [], categories = [], awards =
       announcement_date: announcementDate.trim() || null,
       release_date: releaseDate.trim() || null,
       discontinued_date: discontinuedDate.trim() || null,
+      software_updates_years: (() => {
+        const n = Number(softwareUpdatesYears);
+        return softwareUpdatesYears.trim() !== "" && !Number.isNaN(n) ? n : null;
+      })(),
+      security_updates_years: (() => {
+        const n = Number(securityUpdatesYears);
+        return securityUpdatesYears.trim() !== "" && !Number.isNaN(n) ? n : null;
+      })(),
       hero_image: heroImage?.trim() || null,
       transparent_image: transparentImage?.trim() || null,
       template_id: templateId.trim() || null,
@@ -723,6 +739,34 @@ export function ProductForm({ product, templates = [], categories = [], awards =
                       onChange={(e) => setDiscontinuedDate(e.target.value)}
                       className={inputClass}
                       aria-label="Discontinued date"
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelClass}>Software Updates (Years)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={softwareUpdatesYears}
+                      onChange={(e) => setSoftwareUpdatesYears(e.target.value)}
+                      className={inputClass}
+                      placeholder="e.g. 5"
+                      aria-label="Software updates years"
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Security Updates (Years)</label>
+                    <input
+                      type="number"
+                      min={0}
+                      step={1}
+                      value={securityUpdatesYears}
+                      onChange={(e) => setSecurityUpdatesYears(e.target.value)}
+                      className={inputClass}
+                      placeholder="e.g. 7"
+                      aria-label="Security updates years"
                     />
                   </div>
                 </div>

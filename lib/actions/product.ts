@@ -13,6 +13,8 @@ function toProductRow(data: Partial<Product>): Record<string, unknown> {
   if (data.announcement_date !== undefined) row.announcement_date = data.announcement_date ?? null;
   if (data.release_date !== undefined) row.release_date = data.release_date ?? null;
   if (data.discontinued_date !== undefined) row.discontinued_date = data.discontinued_date ?? null;
+  if (data.software_updates_years !== undefined) row.software_updates_years = data.software_updates_years ?? null;
+  if (data.security_updates_years !== undefined) row.security_updates_years = data.security_updates_years ?? null;
   if (data.hero_image !== undefined) row.hero_image = data.hero_image ?? null;
   if (data.transparent_image !== undefined) row.transparent_image = data.transparent_image ?? null;
   if (data.template_id !== undefined) row.template_id = data.template_id ?? null;
@@ -103,6 +105,8 @@ export async function upsertProduct(
       announcement_date: data.announcement_date ?? null,
       release_date: data.release_date ?? null,
       discontinued_date: data.discontinued_date ?? null,
+      software_updates_years: data.software_updates_years ?? null,
+      security_updates_years: data.security_updates_years ?? null,
       hero_image: data.hero_image ?? null,
       transparent_image: data.transparent_image ?? null,
       template_id: data.template_id ?? null,

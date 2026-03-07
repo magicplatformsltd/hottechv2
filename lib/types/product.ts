@@ -160,6 +160,10 @@ export type Product = {
   release_date: string | null;
   /** ISO date (YYYY-MM-DD) or null. */
   discontinued_date?: string | null;
+  /** Years of software/OS updates (e.g. 5). */
+  software_updates_years?: number | null;
+  /** Years of security updates (e.g. 7). */
+  security_updates_years?: number | null;
   hero_image: string | null;
   transparent_image: string | null;
   template_id?: string | null;

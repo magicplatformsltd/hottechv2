@@ -332,20 +332,6 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
         {isSpecSheetTemplate ? (
           <>
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">{product.name}</h2>
-            {(product.announcement_date || product.release_date || product.discontinued_date) && (
-              <div className="text-sm text-gray-400 dark:text-gray-500 mb-4">
-                {product.announcement_date && (
-                  <>Announced: {formatDate(product.announcement_date)}</>
-                )}
-                {product.announcement_date && product.release_date && " • "}
-                {product.release_date && (
-                  <>Released: {formatDate(product.release_date)}</>
-                )}
-                {product.discontinued_date && (
-                  <> • Discontinued: {formatDate(product.discontinued_date)}</>
-                )}
-              </div>
-            )}
             {/* Standalone Spec Sheet — GSMArena-style grouped table */}
             <div className="w-full bg-white/5 border border-white/10 rounded-xl overflow-hidden mb-8">
               {templateSchema.length === 0 ? (
@@ -419,6 +405,68 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
                   );
                 })
               )}
+              {/* KEY DATES & SUPPORT — same structure as dynamic spec groups */}
+              {(product.announcement_date ||
+                product.release_date ||
+                product.discontinued_date ||
+                product.software_updates_years != null ||
+                product.security_updates_years != null) && (
+                <div>
+                  <div className="bg-white/10 p-3 font-bold text-sm uppercase tracking-wider text-gray-200 dark:text-gray-300">
+                    KEY DATES &amp; SUPPORT
+                  </div>
+                  {product.announcement_date && (
+                    <div className="flex border-b border-white/5 last:border-b-0">
+                      <div className="w-1/3 font-medium text-gray-400 p-3 text-sm capitalize">
+                        Announced
+                      </div>
+                      <div className="w-2/3 text-gray-900 dark:text-white p-3 text-sm">
+                        {formatDate(product.announcement_date)}
+                      </div>
+                    </div>
+                  )}
+                  {product.release_date && (
+                    <div className="flex border-b border-white/5 last:border-b-0">
+                      <div className="w-1/3 font-medium text-gray-400 p-3 text-sm capitalize">
+                        Released
+                      </div>
+                      <div className="w-2/3 text-gray-900 dark:text-white p-3 text-sm">
+                        {formatDate(product.release_date)}
+                      </div>
+                    </div>
+                  )}
+                  {product.discontinued_date && (
+                    <div className="flex border-b border-white/5 last:border-b-0">
+                      <div className="w-1/3 font-medium text-gray-400 p-3 text-sm capitalize">
+                        Discontinued
+                      </div>
+                      <div className="w-2/3 text-gray-900 dark:text-white p-3 text-sm">
+                        {formatDate(product.discontinued_date)}
+                      </div>
+                    </div>
+                  )}
+                  {product.software_updates_years != null && (
+                    <div className="flex border-b border-white/5 last:border-b-0">
+                      <div className="w-1/3 font-medium text-gray-400 p-3 text-sm capitalize">
+                        OS Updates
+                      </div>
+                      <div className="w-2/3 text-gray-900 dark:text-white p-3 text-sm">
+                        {product.software_updates_years} Years
+                      </div>
+                    </div>
+                  )}
+                  {product.security_updates_years != null && (
+                    <div className="flex border-b border-white/5 last:border-b-0">
+                      <div className="w-1/3 font-medium text-gray-400 p-3 text-sm capitalize">
+                        Security Updates
+                      </div>
+                      <div className="w-2/3 text-gray-900 dark:text-white p-3 text-sm">
+                        {product.security_updates_years} Years
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             {displayAffiliates.length > 0 && (
               <footer className="flex flex-col sm:flex-row flex-wrap items-center sm:items-center sm:justify-end gap-3 pt-6 border-t border-white/10">
@@ -481,25 +529,11 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
           </div>
           )}
 
-          {/* Column 2: Narrative — Name + Lifecycle dates + Bottom Line */}
+          {/* Column 2: Narrative — Name + Bottom Line */}
           <div className={`flex flex-col justify-center ${!showImageAttr ? "md:col-span-9" : "md:col-span-6"}`}>
             <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">
               {product.name}
             </h2>
-            {(product.announcement_date || product.release_date || product.discontinued_date) && (
-              <div className="text-sm text-gray-400 dark:text-gray-500 mt-2">
-                {product.announcement_date && (
-                  <>Announced: {formatDate(product.announcement_date)}</>
-                )}
-                {product.announcement_date && product.release_date && " • "}
-                {product.release_date && (
-                  <>Released: {formatDate(product.release_date)}</>
-                )}
-                {product.discontinued_date && (
-                  <> • Discontinued: {formatDate(product.discontinued_date)}</>
-                )}
-              </div>
-            )}
             {isShow(data.show_bottom_line) && displayDescription && (
               <p className="text-lg opacity-90 leading-relaxed text-gray-700 dark:text-gray-200">
                 {displayDescription}
