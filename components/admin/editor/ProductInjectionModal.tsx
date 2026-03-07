@@ -462,8 +462,8 @@ export function ProductInjectionModal({
                             className="w-full px-3 py-2.5 text-left text-sm text-hot-white hover:bg-white/10"
                           >
                             <span className="font-medium">{p.name}</span>
-                            {p.brand && (
-                              <span className="ml-2 text-gray-400">{p.brand}</span>
+                            {p.brands?.name && (
+                              <span className="ml-2 text-gray-400">{p.brands.name}</span>
                             )}
                           </button>
                         </li>

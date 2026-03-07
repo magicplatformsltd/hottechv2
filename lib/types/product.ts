@@ -21,6 +21,16 @@ export type ProductTemplate = {
 
 export type { SpecGroup, SpecItem } from "./template";
 
+/** Brand row from brands table (joined on products.brand_id). */
+export type Brand = {
+  id: string;
+  name: string;
+  slug: string;
+  logo_url: string | null;
+  description: string | null;
+  created_at: string;
+};
+
 /** Key/value product specs (e.g. cpu, ram, display). Flat format. */
 export type ProductSpecs = Record<string, string>;
 
@@ -198,7 +208,7 @@ export type EditorialData = {
 /** Draft payload: staging data shown in preview; applied to live columns on publish. */
 export type ProductDraftData = Partial<{
   name: string;
-  brand: string;
+  brand_id: string | null;
   slug: string;
   announcement_date: string | null;
   release_date: string | null;
@@ -222,7 +232,10 @@ export type ProductDraftData = Partial<{
 export type Product = {
   id: string;
   name: string;
-  brand: string;
+  /** FK to brands.id. */
+  brand_id: string | null;
+  /** Joined from brands table (Supabase alias: brands). */
+  brands?: Brand | null;
   slug: string;
   /** ISO date (YYYY-MM-DD) or null. */
   announcement_date?: string | null;

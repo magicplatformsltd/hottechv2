@@ -7,7 +7,8 @@ import { RefreshCw, Eye, Pencil, Calendar } from "lucide-react";
 import { formatDistanceToNow, differenceInHours } from "date-fns";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import { upsertProduct, publishProductDraft } from "@/lib/actions/product";
-import type { Product, ProductSpecsNested, EditorialData, ProductTemplate, AffiliateLink, VariantMatrixEntry, IpRatingEntry, BooleanWithDetails, CameraLensData, DisplayPanelData } from "@/lib/types/product";
+import { createBrand } from "@/lib/actions/brand";
+import type { Product, Brand, ProductSpecsNested, EditorialData, ProductTemplate, AffiliateLink, VariantMatrixEntry, IpRatingEntry, BooleanWithDetails, CameraLensData, DisplayPanelData } from "@/lib/types/product";
 import type { ProductSpecsInput } from "@/lib/types/product";
 import { getSpecLabelsFromSchema, getTemplateSchemaAsGroups } from "@/lib/types/template";
 import type { SpecGroup, SpecItem } from "@/lib/types/template";
@@ -57,6 +58,7 @@ function getDefaultScheduledTimeLocal(timezone: string): string {
 
 type ProductFormProps = {
   product: Product | null;
+  brands?: Brand[];
   templates?: ProductTemplate[];
   categories?: CategoryRow[];
   awards?: ProductAwardRecord[];
@@ -114,7 +116,7 @@ type SubScoreEntry = { label: string; value: number };
 function emptyProduct(): Partial<Product> {
   return {
     name: "",
-    brand: "",
+    brand_id: null,
     slug: "",
     release_date: null,
     hero_image: null,
@@ -317,7 +319,7 @@ function mergeDraftOverProduct(product: Product | null): Partial<Product> {
   return { ...p, ...draft } as Partial<Product>;
 }
 
-export function ProductForm({ product, templates = [], categories = [], awards = [], onSuccess }: ProductFormProps) {
+export function ProductForm({ product, brands = [], templates = [], categories = [], awards = [], onSuccess }: ProductFormProps) {
   const router = useRouter();
   const initial = useMemo(() => mergeDraftOverProduct(product), [product]);
 
@@ -330,7 +332,17 @@ export function ProductForm({ product, templates = [], categories = [], awards =
     initial.category_id != null ? initial.category_id : ""
   );
   const [name, setName] = useState(initial.name ?? "");
-  const [brand, setBrand] = useState(initial.brand ?? "");
+  const [brandId, setBrandId] = useState<string | "">(() => {
+    const id = initial.brand_id ?? (product?.brands as Brand | null)?.id ?? "";
+    if (id) return String(id);
+    const legacyBrandName = (initial as { brand?: string }).brand;
+    if (legacyBrandName && brands.length) {
+      const found = brands.find((b) => b.name === legacyBrandName);
+      return found?.id ?? "";
+    }
+    return "";
+  });
+  const [newBrandName, setNewBrandName] = useState("");
   const [slug, setSlug] = useState(initial.slug ?? "");
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(Boolean(initial.slug?.trim()));
   const [announcementDate, setAnnouncementDate] = useState(
@@ -765,10 +777,28 @@ export function ProductForm({ product, templates = [], categories = [], awards =
       }))
       .filter((item) => item.retailer || item.url);
 
+    let resolvedBrandId: string | null = brandId?.trim() || null;
+    if (resolvedBrandId === "__new__") {
+      if (!newBrandName.trim()) {
+        setError("Enter a name for the new brand.");
+        setSaving(false);
+        return;
+      }
+    }
+    if (resolvedBrandId === "__new__" && newBrandName.trim()) {
+      const { brand: created, error: createErr } = await createBrand(newBrandName.trim());
+      if (createErr || !created) {
+        setError(createErr ?? "Failed to create brand.");
+        setSaving(false);
+        return;
+      }
+      resolvedBrandId = created.id;
+    }
+
     const payload: Partial<Product> = {
       ...(product?.id ? { id: product.id } : {}),
       name: name.trim(),
-      brand: brand.trim(),
+      brand_id: resolvedBrandId,
       slug: slug.trim(),
       announcement_date: announcementDate.trim() || null,
       release_date: releaseDate.trim() || null,
@@ -1047,14 +1077,31 @@ export function ProductForm({ product, templates = [], categories = [], awards =
                 </div>
                 <div>
                   <label className={labelClass}>Brand</label>
-                  <input
-                    type="text"
-                    value={brand}
-                    onChange={(e) => setBrand(e.target.value)}
+                  <select
+                    value={brandId}
+                    onChange={(e) => setBrandId(e.target.value)}
                     className={inputClass}
-                    placeholder="Brand"
                     required
-                  />
+                    aria-label="Brand"
+                  >
+                    <option value="">Select brand</option>
+                    {brands.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                    <option value="__new__">➕ New brand...</option>
+                  </select>
+                  {brandId === "__new__" && (
+                    <input
+                      type="text"
+                      value={newBrandName}
+                      onChange={(e) => setNewBrandName(e.target.value)}
+                      className={`${inputClass} mt-2`}
+                      placeholder="New brand name"
+                      aria-label="New brand name"
+                    />
+                  )}
                 </div>
                 <div>
                   <label className={labelClass}>Slug</label>

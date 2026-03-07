@@ -12,12 +12,13 @@ import type {
   ProductSpecsNested,
 } from "@/lib/types/product";
 import type { SpecGroup, SpecItem } from "@/lib/types/template";
+import { getOrCreateBrandWithClient } from "@/lib/actions/brand";
 
 /** Build a row payload for products table from Partial<Product>, omitting undefined and handling JSONB. */
 function toProductRow(data: Partial<Product>): Record<string, unknown> {
   const row: Record<string, unknown> = {};
   if (data.name !== undefined) row.name = data.name;
-  if (data.brand !== undefined) row.brand = data.brand;
+  if (data.brand_id !== undefined) row.brand_id = data.brand_id;
   if (data.slug !== undefined) row.slug = data.slug;
   if (data.announcement_date !== undefined) row.announcement_date = data.announcement_date ?? null;
   if (data.release_date !== undefined) row.release_date = data.release_date ?? null;
@@ -44,7 +45,7 @@ function toProductRow(data: Partial<Product>): Record<string, unknown> {
 function buildDraftDataFromPayload(data: Partial<Product>): ProductDraftData {
   return {
     name: data.name ?? undefined,
-    brand: data.brand ?? undefined,
+    brand_id: data.brand_id ?? undefined,
     slug: data.slug ?? undefined,
     template_id: data.template_id ?? undefined,
     specs: data.specs ?? undefined,
@@ -240,7 +241,7 @@ export async function getProductById(id: string): Promise<Product | null> {
   const client = await createClient();
   const { data, error } = await client
     .from("products")
-    .select("*")
+    .select("*, brands(*)")
     .eq("id", id.trim())
     .maybeSingle();
 
@@ -256,7 +257,7 @@ export async function getProductBySlug(slug: string): Promise<Product | null> {
   const client = await createClient();
   const { data, error } = await client
     .from("products")
-    .select("*")
+    .select("*, brands(*)")
     .eq("slug", slug.trim())
     .maybeSingle();
 
@@ -272,7 +273,7 @@ export async function getProductsByTemplateId(templateId: string): Promise<Produ
   const client = await createClient();
   const { data, error } = await client
     .from("products")
-    .select("*")
+    .select("*, brands(*)")
     .eq("template_id", templateId.trim())
     .order("name", { ascending: true });
 
@@ -343,15 +344,18 @@ export async function upsertProduct(
   }
 
   const name = (data.name ?? "").trim();
-  const brand = (data.brand ?? "").trim();
+  const brandId = data.brand_id ?? null;
   const slug = (data.slug ?? "").trim();
-  if (!name || !brand || !slug) {
-    return { error: "name, brand, and slug are required to create a product." };
+  if (!name || !slug) {
+    return { error: "name and slug are required to create a product." };
+  }
+  if (!brandId && !data.id) {
+    return { error: "Brand is required to create a product." };
   }
 
   const insertPayload: Partial<Product> = {
     name,
-    brand,
+    brand_id: brandId,
     slug,
     announcement_date: data.announcement_date ?? null,
     release_date: data.release_date ?? null,
@@ -447,16 +451,21 @@ async function doImportProduct(
   incoming: ImportProductPayload
 ): Promise<{ product?: Product; error?: string }> {
   const name = (incoming.name ?? "").trim();
-  const brand = (incoming.brand ?? "").trim();
+  const brandName = (incoming.brand ?? "").trim();
   const slug = (incoming.slug ?? "").trim();
   const templateId = (incoming.template_id ?? "").trim();
-  if (!name || !brand || !slug || !templateId) {
+  if (!name || !brandName || !slug || !templateId) {
     return { error: "name, brand, slug, and template_id are required to import a product." };
+  }
+
+  const brandId = await getOrCreateBrandWithClient(client, brandName);
+  if (!brandId) {
+    return { error: "Could not resolve or create brand." };
   }
 
   const draft_data: ProductDraftData = {
     name,
-    brand,
+    brand_id: brandId,
     slug,
     template_id: templateId,
     specs: incoming.specs ?? {},
@@ -477,7 +486,7 @@ async function doImportProduct(
 
   const payload: Partial<Product> = {
     name,
-    brand,
+    brand_id: brandId,
     slug,
     template_id: templateId,
     status: "pending_review",
@@ -498,7 +507,7 @@ async function doImportProduct(
   const { data: created, error } = await client
     .from("products")
     .insert(row)
-    .select()
+    .select("*, brands(*)")
     .single();
 
   if (error) {
@@ -553,7 +562,7 @@ export async function publishProductDraft(
   const useDate = at ? new Date(at) : new Date();
   const merged: Partial<Product> = {
     name: (draft?.name ?? product.name) ?? "",
-    brand: (draft?.brand ?? product.brand) ?? "",
+    brand_id: draft?.brand_id ?? product.brand_id ?? null,
     slug: (draft?.slug ?? product.slug) ?? "",
     announcement_date: draft?.announcement_date ?? product.announcement_date ?? null,
     release_date: draft?.release_date ?? product.release_date ?? null,
@@ -622,8 +631,8 @@ export async function searchProducts(query: string): Promise<Product[]> {
   const pattern = `%${String(q).replace(/"/g, '\\"')}%`;
   const { data, error } = await client
     .from("products")
-    .select("*")
-    .or(`name.ilike."${pattern}",brand.ilike."${pattern}"`)
+    .select("*, brands(*)")
+    .or(`name.ilike."${pattern}",brands.name.ilike."${pattern}"`)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -643,7 +652,7 @@ export async function getLinkedProducts(postId: string): Promise<LinkedProduct[]
   const client = await createClient();
   const { data, error } = await client
     .from("post_products")
-    .select("product_id, is_primary, products(*)")
+    .select("product_id, is_primary, products(*, brands(*))")
     .eq("post_id", postId.trim())
     .order("is_primary", { ascending: false });
 

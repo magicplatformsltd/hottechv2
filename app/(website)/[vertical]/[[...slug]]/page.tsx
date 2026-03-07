@@ -27,7 +27,7 @@ import { getBaseUrl } from "@/lib/url";
 import { generateProductSchema } from "@/lib/schema/product-jsonld";
 import { getSpecsForSchema } from "@/lib/format-specs";
 import { getTemplateSchemaAsGroups } from "@/lib/types/template";
-import { isPublished, isPreviewMode, getProductForDisplay } from "@/lib/content-helpers";
+import { isPublished, isPreviewMode, getProductForDisplay, getProductBrandName } from "@/lib/content-helpers";
 import { getIsAdmin } from "@/lib/auth";
 import { getCurrencySymbol } from "@/lib/constants/currencies";
 
@@ -158,7 +158,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     // Fallback: vertical is not a template → try as product/post for metadata
     const fallback = await resolveLevel2(vertical, vertical);
     if (fallback?.type === "product") {
-      const title = fallback.product.seo_title ?? `${fallback.product.name} | ${fallback.product.brand}`;
+      const title = fallback.product.seo_title ?? `${fallback.product.name} | ${getProductBrandName(fallback.product)}`;
       const description = fallback.product.seo_description ?? fallback.product.editorial_data?.bottom_line ?? undefined;
       return await constructMetadata({ title, description, image: fallback.product.hero_image ?? fallback.product.transparent_image ?? undefined, type: "website", canonical: `/${vertical}` });
     }
@@ -196,7 +196,7 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   const r = await resolveLevel2(vertical, slugParts[0]);
   if (!r) return {};
   if (r.type === "product") {
-    const title = r.product.seo_title ?? `${r.product.name} | ${r.product.brand}`;
+    const title = r.product.seo_title ?? `${r.product.name} | ${getProductBrandName(r.product)}`;
     const description = r.product.seo_description ?? r.product.editorial_data?.bottom_line ?? undefined;
     return await constructMetadata({
       title,
@@ -270,7 +270,7 @@ export default async function VerticalPage({ params, searchParams: searchParamsP
                     className="block rounded-xl border border-white/10 bg-white/5 p-4 hover:bg-white/10 transition-colors"
                   >
                     <span className="font-medium text-hot-white">{p.name}</span>
-                    {p.brand && <span className="text-gray-400 text-sm ml-2">· {p.brand}</span>}
+                    {getProductBrandName(p) && <span className="text-gray-400 text-sm ml-2">· {getProductBrandName(p)}</span>}
                   </Link>
                 </li>
               ))}
@@ -320,9 +320,9 @@ export default async function VerticalPage({ params, searchParams: searchParamsP
         const pros = product.editorial_data?.pros ?? [];
         const cons = product.editorial_data?.cons ?? [];
         const productNameDisplay =
-          product.name.toLowerCase().startsWith((product.brand || "").toLowerCase())
+          product.name.toLowerCase().startsWith((getProductBrandName(product) || "").toLowerCase())
             ? product.name
-            : `${product.brand || ""} ${product.name}`.trim();
+            : `${getProductBrandName(product)} ${product.name}`.trim();
         const affiliateLinks = normalizeAffiliateLinks(product.affiliate_links);
         const reviewHrefFallback = `/${vertical}/${product.slug ?? product.id}/review`;
 
@@ -456,11 +456,11 @@ export default async function VerticalPage({ params, searchParams: searchParamsP
             <p className="text-gray-400 font-sans mb-10">Comparison</p>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
               <div>
-                <h2 className="text-xl font-semibold text-hot-white mb-4">{fallback.productA.brand} {fallback.productA.name}</h2>
+                <h2 className="text-xl font-semibold text-hot-white mb-4">{getProductBrandName(fallback.productA)} {fallback.productA.name}</h2>
                 <ProductSpecsTable product={fallback.productA} template={fallback.templateA} />
               </div>
               <div>
-                <h2 className="text-xl font-semibold text-hot-white mb-4">{fallback.productB.brand} {fallback.productB.name}</h2>
+                <h2 className="text-xl font-semibold text-hot-white mb-4">{getProductBrandName(fallback.productB)} {fallback.productB.name}</h2>
                 <ProductSpecsTable product={fallback.productB} template={fallback.templateB} />
               </div>
             </div>
@@ -602,9 +602,9 @@ export default async function VerticalPage({ params, searchParams: searchParamsP
     const pros = product.editorial_data?.pros ?? [];
     const cons = product.editorial_data?.cons ?? [];
     const productNameDisplay =
-      product.name.toLowerCase().startsWith((product.brand || "").toLowerCase())
-        ? product.name
-        : `${product.brand || ""} ${product.name}`.trim();
+      product.name.toLowerCase().startsWith((getProductBrandName(product) || "").toLowerCase())
+            ? product.name
+        : `${getProductBrandName(product)} ${product.name}`.trim();
     const affiliateLinks = normalizeAffiliateLinks(product.affiliate_links);
     const reviewHref = `/${vertical}/${product.slug ?? product.id}/review`;
 
@@ -759,11 +759,11 @@ export default async function VerticalPage({ params, searchParams: searchParamsP
         <p className="text-gray-400 font-sans mb-10">Comparison</p>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
           <div>
-            <h2 className="text-xl font-semibold text-hot-white mb-4">{r.productA.brand} {r.productA.name}</h2>
+            <h2 className="text-xl font-semibold text-hot-white mb-4">{getProductBrandName(r.productA)} {r.productA.name}</h2>
             <ProductSpecsTable product={r.productA} template={r.templateA} />
           </div>
           <div>
-            <h2 className="text-xl font-semibold text-hot-white mb-4">{r.productB.brand} {r.productB.name}</h2>
+            <h2 className="text-xl font-semibold text-hot-white mb-4">{getProductBrandName(r.productB)} {r.productB.name}</h2>
             <ProductSpecsTable product={r.productB} template={r.templateB} />
           </div>
         </div>

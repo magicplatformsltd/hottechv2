@@ -138,8 +138,8 @@ export function ProductLinker({ postId, initialLinked }: ProductLinkerProps) {
                       className="w-full px-3 py-2 text-left text-sm text-hot-white hover:bg-white/10"
                     >
                       <span className="font-medium">{product.name}</span>
-                      {product.brand && (
-                        <span className="ml-2 text-gray-400">{product.brand}</span>
+                      {product.brands?.name && (
+                        <span className="ml-2 text-gray-400">{product.brands.name}</span>
                       )}
                     </button>
                   </li>
@@ -174,8 +174,8 @@ export function ProductLinker({ postId, initialLinked }: ProductLinkerProps) {
                 </button>
                 <span className="min-w-0 flex-1 truncate font-sans text-sm text-hot-white">
                   {product.name}
-                  {product.brand && (
-                    <span className="ml-1 text-gray-400">· {product.brand}</span>
+                  {product.brands?.name && (
+                    <span className="ml-1 text-gray-400">· {product.brands.name}</span>
                   )}
                 </span>
                 <button

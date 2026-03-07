@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import type { Product } from "@/lib/types/product";
+import { getProductBrandName } from "@/lib/content-helpers";
 import { getAwardById } from "@/lib/actions/award";
 import { AwardBadge } from "@/components/public/AwardBadge";
 
@@ -38,6 +39,7 @@ export function ProductCard({
 }: ProductCardProps) {
   const glowColor = product.primary_color?.trim() || DEFAULT_GLOW_COLOR;
   const imageUrl = product.transparent_image ?? product.hero_image;
+  const brandName = getProductBrandName(product);
   const rating = showRating && typeof product.editorial_data?.final_score === "number"
     ? product.editorial_data.final_score
     : null;
@@ -105,9 +107,9 @@ export function ProductCard({
             <p className="font-sans text-base font-bold text-hot-white leading-tight line-clamp-2">
               {product.name}
             </p>
-            {product.brand && (
+            {brandName && (
               <p className="font-sans text-xs text-gray-400 mt-0.5 truncate">
-                {product.brand}
+                {brandName}
               </p>
             )}
           </div>

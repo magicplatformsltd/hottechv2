@@ -82,7 +82,7 @@ export function ProductsTable({ products }: ProductsTableProps) {
             </span>
           </td>
           <td className="w-32 shrink-0 px-4 py-3 text-gray-400 align-top">
-            {product.brand || "—"}
+            {product.brands?.name ?? "—"}
           </td>
           <td className="w-28 shrink-0 px-4 py-3 text-right align-top">
             <StatusBadge status={product.status} publishedAt={product.published_at} />

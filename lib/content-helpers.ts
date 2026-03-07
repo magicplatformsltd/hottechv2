@@ -61,3 +61,9 @@ export function getProductForDisplay<T extends { draft_data?: Record<string, unk
   if (!useDraft || !product.draft_data || typeof product.draft_data !== "object") return product;
   return { ...product, ...product.draft_data } as T;
 }
+
+/** Brand display name from product (joined brands relation or legacy). */
+export function getProductBrandName(product: { brands?: { name?: string } | null } | null | undefined): string {
+  if (!product?.brands?.name) return "";
+  return String(product.brands.name).trim();
+}

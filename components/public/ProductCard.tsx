@@ -184,8 +184,8 @@ export function ProductCard({ data, className = "" }: ProductCardProps) {
                 <AwardBadge award={award} className="shrink-0" />
               )}
             </div>
-            {product.brand && (
-              <p className="text-sm text-gray-400">{product.brand}</p>
+            {product.brands?.name && (
+              <p className="text-sm text-gray-400">{product.brands.name}</p>
             )}
             {showReleaseDate && releaseDate && (
               <p className="mt-0.5 text-xs text-gray-500">

@@ -65,8 +65,8 @@ export function generateProductSchema(product: Product, options: ProductSchemaOp
     name: product.name ?? undefined,
     description: (product.editorial_data?.bottom_line ?? product.seo_description ?? "").trim() || undefined,
     brand:
-      product.brand?.trim()
-        ? { "@type": "Brand", name: product.brand.trim() }
+      product.brands?.name?.trim()
+        ? { "@type": "Brand", name: product.brands.name.trim() }
         : undefined,
     image: absoluteImageUrl(product.hero_image) ?? absoluteImageUrl(product.transparent_image) ?? undefined,
   };
