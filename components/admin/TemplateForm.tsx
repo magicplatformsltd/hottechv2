@@ -220,6 +220,7 @@ function SortableSpecItem({
 
 function SortableGroupBlock({
   group,
+  defaultOpen,
   onUpdateGroupName,
   onRemoveGroup,
   onAddSpec,
@@ -229,6 +230,7 @@ function SortableGroupBlock({
   inputClass: cls,
 }: {
   group: SpecGroup;
+  defaultOpen?: boolean;
   onUpdateGroupName: (name: string) => void;
   onRemoveGroup: () => void;
   onAddSpec: () => void;
@@ -268,59 +270,79 @@ function SortableGroupBlock({
       style={style}
       className={`rounded-lg border border-white/10 bg-hot-gray/30 overflow-hidden ${isDragging ? "z-20 opacity-95 shadow-xl" : ""}`}
     >
-      <div className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-hot-gray/50 px-3 py-2">
-        <button
-          type="button"
-          className="touch-none cursor-grab rounded p-1 text-gray-400 hover:bg-white/10 hover:text-hot-white active:cursor-grabbing"
-          {...attributes}
-          {...listeners}
-          aria-label="Drag to reorder group"
-        >
-          <GripVertical className="h-4 w-4" />
-        </button>
-        <input
-          type="text"
-          value={group.groupName}
-          onChange={(e) => onUpdateGroupName(e.target.value)}
-          className={`${cls} max-w-[200px]`}
-          placeholder="Group name (e.g. Display)"
-        />
-        <button
-          type="button"
-          onClick={onAddSpec}
-          className="flex items-center gap-1 rounded-md border border-white/20 bg-white/5 px-2 py-1.5 font-sans text-sm text-gray-400 hover:bg-white/10 hover:text-hot-white"
-        >
-          <Plus className="h-4 w-4" />
-          Add Spec
-        </button>
-        <button
-          type="button"
-          onClick={onRemoveGroup}
-          className="ml-auto rounded p-1.5 text-red-400 hover:bg-red-500/10"
-          aria-label="Remove group"
-        >
-          <Trash2 className="h-4 w-4" />
-        </button>
-      </div>
-      <div className="space-y-2 p-3">
-        {group.specs.length === 0 ? (
-          <p className="text-sm text-gray-500">No specs. Click &quot;Add Spec&quot; above.</p>
-        ) : (
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleSpecDragEnd}>
-            <SortableContext items={group.specs.map((s) => s.id)} strategy={verticalListSortingStrategy}>
-              {group.specs.map((spec) => (
-                <SortableSpecItem
-                  key={spec.id}
-                  spec={spec}
-                  onUpdate={(updates) => onUpdateSpec(spec.id, updates)}
-                  onRemove={() => onRemoveSpec(spec.id)}
-                  inputClass={cls}
-                />
-              ))}
-            </SortableContext>
-          </DndContext>
-        )}
-      </div>
+      <details
+        className="group mb-4 bg-white/5 border border-white/10 rounded-xl overflow-hidden"
+        open={defaultOpen}
+      >
+        <summary className="p-4 bg-white/5 hover:bg-white/10 list-none flex justify-between items-center cursor-pointer border-b border-white/5">
+          <div className="flex flex-wrap items-center gap-2 min-w-0">
+            <button
+              type="button"
+              className="touch-none cursor-grab rounded p-1 text-gray-400 hover:bg-white/10 hover:text-hot-white active:cursor-grabbing shrink-0"
+              {...attributes}
+              {...listeners}
+              aria-label="Drag to reorder group"
+            >
+              <GripVertical className="h-4 w-4" />
+            </button>
+            <input
+              type="text"
+              value={group.groupName}
+              onChange={(e) => onUpdateGroupName(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+              className={`${cls} max-w-[200px]`}
+              placeholder="Group name (e.g. Display)"
+            />
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onAddSpec();
+              }}
+              onKeyDown={(e) => e.stopPropagation()}
+              className="flex items-center gap-1 rounded-md border border-white/20 bg-white/5 px-2 py-1.5 font-sans text-sm text-gray-400 hover:bg-white/10 hover:text-hot-white"
+            >
+              <Plus className="h-4 w-4" />
+              Add Spec
+            </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRemoveGroup();
+              }}
+              onKeyDown={(e) => e.stopPropagation()}
+              className="rounded p-1.5 text-red-400 hover:bg-red-500/10 shrink-0"
+              aria-label="Remove group"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
+          <span className="text-gray-400 group-open:rotate-180 transition-transform ml-4 shrink-0" aria-hidden>
+            ▼
+          </span>
+        </summary>
+        <div className="p-4 space-y-3">
+          {group.specs.length === 0 ? (
+            <p className="text-sm text-gray-500">No specs. Click &quot;Add Spec&quot; above.</p>
+          ) : (
+            <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleSpecDragEnd}>
+              <SortableContext items={group.specs.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+                {group.specs.map((spec) => (
+                  <SortableSpecItem
+                    key={spec.id}
+                    spec={spec}
+                    onUpdate={(updates) => onUpdateSpec(spec.id, updates)}
+                    onRemove={() => onRemoveSpec(spec.id)}
+                    inputClass={cls}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
+          )}
+        </div>
+      </details>
     </div>
   );
 }
@@ -525,10 +547,11 @@ export function TemplateForm({ template }: TemplateFormProps) {
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleGroupDragEnd}>
             <SortableContext items={groups.map((g) => g.id)} strategy={verticalListSortingStrategy}>
               <div className="space-y-3">
-                {groups.map((group) => (
+                {groups.map((group, idx) => (
                   <SortableGroupBlock
                     key={group.id}
                     group={group}
+                    defaultOpen={idx === 0}
                     onUpdateGroupName={(n) => updateGroupName(group.id, n)}
                     onRemoveGroup={() => removeGroup(group.id)}
                     onAddSpec={() => addSpecToGroup(group.id)}
