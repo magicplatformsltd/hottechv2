@@ -5,13 +5,16 @@ import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { upsertProduct } from "@/lib/actions/product";
 import type { Product, ProductSpecs, EditorialData, ProductTemplate, AffiliateLink } from "@/lib/types/product";
+import type { ProductAwardRecord } from "@/lib/types/award";
 import type { CategoryRow } from "@/lib/actions/categories";
 import { UniversalImagePicker } from "@/app/components/admin/shared/UniversalImagePicker";
+import { ChevronDown } from "lucide-react";
 
 type ProductFormProps = {
   product: Product | null;
   templates?: ProductTemplate[];
   categories?: CategoryRow[];
+  awards?: ProductAwardRecord[];
   /** When provided, called after successful save instead of redirecting to /admin/products. */
   onSuccess?: () => void;
 };
@@ -101,7 +104,7 @@ function slugify(text: string): string {
     || "";
 }
 
-export function ProductForm({ product, templates = [], categories = [], onSuccess }: ProductFormProps) {
+export function ProductForm({ product, templates = [], categories = [], awards = [], onSuccess }: ProductFormProps) {
   const router = useRouter();
   const initial = product ?? emptyProduct();
 
@@ -122,6 +125,9 @@ export function ProductForm({ product, templates = [], categories = [], onSucces
   );
   const [seoTitle, setSeoTitle] = useState(initial.seo_title ?? "");
   const [seoDescription, setSeoDescription] = useState(initial.seo_description ?? "");
+  const [awardId, setAwardId] = useState<string | "">(initial.award_id ?? "");
+  const [awardSearchOpen, setAwardSearchOpen] = useState(false);
+  const [awardSearchQuery, setAwardSearchQuery] = useState("");
   const [affiliateLinks, setAffiliateLinks] = useState<AffiliateLink[]>(() =>
     normalizeAffiliateLinks(initial.affiliate_links)
   );
@@ -352,6 +358,7 @@ export function ProductForm({ product, templates = [], categories = [], onSucces
       category_id: categoryId === "" ? null : categoryId,
       seo_title: seoTitle.trim() || null,
       seo_description: seoDescription.trim() || null,
+      award_id: awardId.trim() || null,
       specs: entriesToSpecs(specEntries),
       affiliate_links: linksPayload,
       editorial_data: editorialData,
@@ -519,6 +526,82 @@ export function ProductForm({ product, templates = [], categories = [], onSucces
                     className={inputClass}
                     placeholder="Optional meta description"
                   />
+                </div>
+              </section>
+
+              <section className="space-y-4">
+                <h2 className="font-sans text-lg font-medium text-hot-white">
+                  Award
+                </h2>
+                <div className="relative">
+                  <button
+                    type="button"
+                    onClick={() => setAwardSearchOpen((o) => !o)}
+                    className="flex w-full items-center justify-between rounded-md border border-white/20 bg-white/5 px-3 py-2 font-sans text-sm text-hot-white placeholder:text-gray-500 focus:border-hot-white/50 focus:outline-none"
+                  >
+                    <span className={awardId ? "" : "text-gray-500"}>
+                      {awardId
+                        ? awards.find((a) => a.id === awardId)?.name ?? "—"
+                        : "None"}
+                    </span>
+                    <ChevronDown className="h-4 w-4 shrink-0 text-gray-400" />
+                  </button>
+                  {awardSearchOpen && (
+                    <>
+                      <div
+                        className="fixed inset-0 z-10"
+                        aria-hidden
+                        onClick={() => setAwardSearchOpen(false)}
+                      />
+                      <div className="absolute top-full left-0 right-0 z-20 mt-1 max-h-48 overflow-hidden rounded-md border border-white/10 bg-hot-gray shadow-lg">
+                        <input
+                          type="text"
+                          value={awardSearchQuery}
+                          onChange={(e) => setAwardSearchQuery(e.target.value)}
+                          placeholder="Search awards…"
+                          className="w-full border-b border-white/10 bg-transparent px-3 py-2 font-sans text-sm text-hot-white placeholder:text-gray-500 focus:outline-none"
+                          autoFocus
+                        />
+                        <ul className="max-h-36 overflow-y-auto py-1">
+                          <li>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setAwardId("");
+                                setAwardSearchOpen(false);
+                                setAwardSearchQuery("");
+                              }}
+                              className="w-full px-3 py-2 text-left font-sans text-sm text-gray-400 hover:bg-white/10 hover:text-hot-white"
+                            >
+                              None
+                            </button>
+                          </li>
+                          {awards
+                            .filter(
+                              (a) =>
+                                !awardSearchQuery.trim() ||
+                                a.name.toLowerCase().includes(awardSearchQuery.toLowerCase()) ||
+                                a.slug.toLowerCase().includes(awardSearchQuery.toLowerCase())
+                            )
+                            .map((a) => (
+                              <li key={a.id}>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setAwardId(a.id);
+                                    setAwardSearchOpen(false);
+                                    setAwardSearchQuery("");
+                                  }}
+                                  className="w-full px-3 py-2 text-left font-sans text-sm text-hot-white hover:bg-white/10"
+                                >
+                                  {a.name}
+                                </button>
+                              </li>
+                            ))}
+                        </ul>
+                      </div>
+                    </>
+                  )}
                 </div>
               </section>
 

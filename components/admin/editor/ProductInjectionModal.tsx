@@ -5,6 +5,8 @@ import { Database } from "lucide-react";
 import { searchProducts, getProductById } from "@/lib/actions/product";
 import { getTemplates } from "@/lib/actions/template";
 import { getCategories } from "@/lib/actions/categories";
+import { getAwards, getAwardById } from "@/lib/actions/award";
+import type { ProductAwardRecord } from "@/lib/types/award";
 import type { Product } from "@/lib/types/product";
 import type { ProductBoxConfig, ProductBoxImageType } from "./extensions/ProductBox";
 import { DEFAULT_PRODUCT_BOX_CONFIG } from "./extensions/ProductBox";
@@ -67,6 +69,8 @@ export function ProductInjectionModal({
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerTemplates, setDrawerTemplates] = useState<Awaited<ReturnType<typeof getTemplates>>>([]);
   const [drawerCategories, setDrawerCategories] = useState<Awaited<ReturnType<typeof getCategories>>>([]);
+  const [drawerAwards, setDrawerAwards] = useState<Awaited<ReturnType<typeof getAwards>>>([]);
+  const [productAward, setProductAward] = useState<ProductAwardRecord | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const productContext = fetchedProduct ?? selectedProduct;
@@ -122,6 +126,20 @@ export function ProductInjectionModal({
   }, [isOpen, editState?.productId]);
 
   useEffect(() => {
+    if (!productContext?.award_id) {
+      setProductAward(null);
+      return;
+    }
+    let cancelled = false;
+    getAwardById(productContext.award_id).then((a) => {
+      if (!cancelled) setProductAward(a ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [productContext?.award_id]);
+
+  useEffect(() => {
     if (!isOpen || editState) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
@@ -144,6 +162,7 @@ export function ProductInjectionModal({
       showImage: true,
       imageType: "transparent",
       showReleaseDate: true,
+      showAward: true,
       includeAffiliateButtons: true,
       selectedAffiliates: affKeys,
     });
@@ -212,9 +231,14 @@ export function ProductInjectionModal({
   const openGlobalEditDrawer = useCallback(async () => {
     if (!productContext) return;
     setDrawerOpen(true);
-    const [templates, categories] = await Promise.all([getTemplates(), getCategories()]);
+    const [templates, categories, awards] = await Promise.all([
+      getTemplates(),
+      getCategories(),
+      getAwards(),
+    ]);
     setDrawerTemplates(templates);
     setDrawerCategories(categories);
+    setDrawerAwards(awards);
   }, [productContext]);
 
   const handleGlobalEditSaved = useCallback(() => {
@@ -351,6 +375,20 @@ export function ProductInjectionModal({
                   </div>
                 )}
 
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={config.showAward ?? true}
+                    onChange={(e) => setConfig((c) => ({ ...c, showAward: e.target.checked }))}
+                    className="rounded border-white/20"
+                  />
+                  <span className="font-sans text-sm text-hot-white">Show Award Badge</span>
+                  {productAward && (
+                    <span className="text-xs text-gray-500">
+                      ({productAward.name})
+                    </span>
+                  )}
+                </label>
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
@@ -499,6 +537,7 @@ export function ProductInjectionModal({
                 product={productContext}
                 templates={drawerTemplates}
                 categories={drawerCategories}
+                awards={drawerAwards}
                 onSuccess={handleGlobalEditSaved}
               />
             </div>

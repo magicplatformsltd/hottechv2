@@ -3,8 +3,12 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import { getProductById } from "@/lib/actions/product";
+import { getTemplateById } from "@/lib/actions/template";
+import { getAwardById } from "@/lib/actions/award";
 import type { Product } from "@/lib/types/product";
+import type { ProductTemplate } from "@/lib/types/product";
 import type { ProductBoxBlockData } from "@/lib/types/post";
+import { AwardBadge } from "./AwardBadge";
 
 type ProductCardProps = {
   data: ProductBoxBlockData;
@@ -35,6 +39,8 @@ function normalizeAffiliateLinks(product: Product | null): { retailer: string; u
 export function ProductCard({ data, className = "" }: ProductCardProps) {
   const { productId, productName, config } = data;
   const [product, setProduct] = useState<Product | null>(null);
+  const [template, setTemplate] = useState<ProductTemplate | null>(null);
+  const [award, setAward] = useState<Awaited<ReturnType<typeof getAwardById>>>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -54,6 +60,34 @@ export function ProductCard({ data, className = "" }: ProductCardProps) {
       cancelled = true;
     };
   }, [productId]);
+
+  useEffect(() => {
+    if (!product?.template_id) {
+      setTemplate(null);
+      return;
+    }
+    let cancelled = false;
+    getTemplateById(product.template_id).then((t) => {
+      if (!cancelled) setTemplate(t ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [product?.template_id]);
+
+  useEffect(() => {
+    if (!product?.award_id) {
+      setAward(null);
+      return;
+    }
+    let cancelled = false;
+    getAwardById(product.award_id).then((a) => {
+      if (!cancelled) setAward(a ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [product?.award_id]);
 
   if (loading) {
     return (
@@ -94,7 +128,10 @@ export function ProductCard({ data, className = "" }: ProductCardProps) {
   const showStarRating = config.showStarRating !== false;
   const showProsCons = config.showProsCons !== false;
   const showKeySpecs = config.showKeySpecs !== false;
-  const keySpecKeys = config.keySpecKeys ?? [];
+  const configKeySpecKeys = config.keySpecKeys ?? [];
+  const templateKeySpecs = Array.isArray(template?.key_specs) ? template.key_specs : [];
+  const keySpecKeysToShow =
+    configKeySpecKeys.length > 0 ? configKeySpecKeys : templateKeySpecs;
   const includeAffiliateButtons = config.includeAffiliateButtons !== false;
   const selectedAffiliates = config.selectedAffiliates ?? [];
 
@@ -108,8 +145,8 @@ export function ProductCard({ data, className = "" }: ProductCardProps) {
 
   const specs = product.specs && typeof product.specs === "object" ? product.specs : {};
   const displaySpecs =
-    showKeySpecs && keySpecKeys.length > 0
-      ? keySpecKeys.filter((k) => k in specs).map((k) => ({ key: k, value: specs[k] }))
+    showKeySpecs && keySpecKeysToShow.length > 0
+      ? keySpecKeysToShow.filter((k) => k in specs).map((k) => ({ key: k, value: specs[k] }))
       : showKeySpecs
         ? Object.entries(specs).map(([key, value]) => ({ key, value }))
         : [];
@@ -138,9 +175,14 @@ export function ProductCard({ data, className = "" }: ProductCardProps) {
             </div>
           )}
           <div className="min-w-0 flex-1">
-            <h3 className="font-sans text-lg font-semibold text-hot-white">
-              {product.name}
-            </h3>
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="font-sans text-lg font-semibold text-hot-white">
+                {product.name}
+              </h3>
+              {config.showAward !== false && award && (
+                <AwardBadge award={award} className="shrink-0" />
+              )}
+            </div>
             {product.brand && (
               <p className="text-sm text-gray-400">{product.brand}</p>
             )}

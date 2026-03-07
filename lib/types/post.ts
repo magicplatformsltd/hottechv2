@@ -88,6 +88,7 @@ export type ProductBoxBlockConfig = {
   imageType?: "transparent" | "hero";
   descriptionOverride?: string;
   showReleaseDate?: boolean;
+  showAward?: boolean;
 };
 
 export type ProductBoxBlockData = {

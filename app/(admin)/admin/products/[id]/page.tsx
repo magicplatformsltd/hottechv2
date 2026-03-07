@@ -3,6 +3,7 @@ import Link from "next/link";
 import { getProductById } from "@/lib/actions/product";
 import { getTemplates } from "@/lib/actions/template";
 import { getCategories } from "@/lib/actions/categories";
+import { getAwards } from "@/lib/actions/award";
 import { ProductForm } from "@/components/admin/ProductForm";
 
 type PageProps = {
@@ -12,10 +13,11 @@ type PageProps = {
 export default async function AdminProductDetailPage({ params }: PageProps) {
   const { id } = await params;
   const isNew = id === "new";
-  const [product, templates, categories] = await Promise.all([
+  const [product, templates, categories, awards] = await Promise.all([
     isNew ? Promise.resolve(null) : getProductById(id),
     getTemplates(),
     getCategories(),
+    getAwards(),
   ]);
 
   if (!isNew && !product) {
@@ -35,7 +37,7 @@ export default async function AdminProductDetailPage({ params }: PageProps) {
       <h1 className="font-serif text-2xl font-bold text-hot-white">
         {isNew ? "New Product" : "Edit Product"}
       </h1>
-      <ProductForm product={product} templates={templates} categories={categories} />
+      <ProductForm product={product} templates={templates} categories={categories} awards={awards} />
     </div>
   );
 }

@@ -29,6 +29,9 @@ export function TemplateForm({ template }: TemplateFormProps) {
       ? [...template.spec_schema]
       : [""]
   );
+  const [keySpecs, setKeySpecs] = useState<string[]>(() =>
+    Array.isArray(template?.key_specs) ? [...template.key_specs] : []
+  );
   const [scoreSchema, setScoreSchema] = useState<string[]>(() =>
     Array.isArray(template?.score_schema) && template.score_schema.length > 0
       ? [...template.score_schema]
@@ -49,14 +52,35 @@ export function TemplateForm({ template }: TemplateFormProps) {
   }, []);
 
   const updateSpec = useCallback((index: number, value: string) => {
+    const oldLabel = specSchema[index]?.trim();
     setSpecSchema((prev) =>
       prev.map((v, i) => (i === index ? value : v))
     );
-  }, []);
+    if (oldLabel) {
+      const newLabel = value.trim();
+      if (oldLabel !== newLabel) {
+        setKeySpecs((prev) =>
+          prev.includes(oldLabel) ? prev.map((k) => (k === oldLabel ? newLabel : k)) : prev
+        );
+      }
+    }
+  }, [specSchema]);
 
   const removeSpec = useCallback((index: number) => {
+    const removedLabel = specSchema[index]?.trim();
     setSpecSchema((prev) =>
       prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)
+    );
+    if (removedLabel) {
+      setKeySpecs((prev) => prev.filter((k) => k !== removedLabel));
+    }
+  }, [specSchema]);
+
+  const toggleKeySpec = useCallback((label: string) => {
+    const trimmed = label.trim();
+    if (!trimmed) return;
+    setKeySpecs((prev) =>
+      prev.includes(trimmed) ? prev.filter((k) => k !== trimmed) : [...prev, trimmed]
     );
   }, []);
 
@@ -88,6 +112,7 @@ export function TemplateForm({ template }: TemplateFormProps) {
       slug: slug.trim(),
       spec_schema: specList,
       score_schema: scoreList,
+      key_specs: keySpecs.filter((k) => specList.includes(k)),
     };
     const result = await upsertTemplate(payload);
     setSaving(false);
@@ -157,11 +182,11 @@ export function TemplateForm({ template }: TemplateFormProps) {
           </button>
         </div>
         <p className="text-sm text-gray-500">
-          Labels for required specs (e.g. Processor, RAM, Display).
+          Labels for required specs (e.g. Processor, RAM, Display). Mark &quot;Key&quot; to show in the Review Box by default.
         </p>
         <div className="space-y-2">
           {specSchema.map((value, i) => (
-            <div key={i} className="flex gap-2">
+            <div key={i} className="flex flex-wrap items-center gap-2">
               <input
                 type="text"
                 value={value}
@@ -169,6 +194,15 @@ export function TemplateForm({ template }: TemplateFormProps) {
                 className={inputClass}
                 placeholder="e.g. Processor"
               />
+              <label className="flex shrink-0 items-center gap-1.5 text-sm text-gray-400">
+                <input
+                  type="checkbox"
+                  checked={value.trim() ? keySpecs.includes(value.trim()) : false}
+                  onChange={() => value.trim() && toggleKeySpec(value.trim())}
+                  className="rounded border-white/20"
+                />
+                Key
+              </label>
               <button
                 type="button"
                 onClick={() => removeSpec(i)}

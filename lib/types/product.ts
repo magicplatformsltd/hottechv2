@@ -10,6 +10,8 @@ export type ProductTemplate = {
   slug: string;
   spec_schema: string[];
   score_schema: string[];
+  /** Spec labels to treat as "Key Specs" in the Review Box (subset of spec_schema). */
+  key_specs?: string[];
   created_at: string;
   updated_at: string;
 };
@@ -48,6 +50,8 @@ export type Product = {
   category_id?: number | null;
   seo_title?: string | null;
   seo_description?: string | null;
+  /** FK to product_awards; null = no award. */
+  award_id?: string | null;
   specs: ProductSpecs;
   affiliate_links: AffiliateLinks;
   editorial_data: EditorialData;

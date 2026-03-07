@@ -29,6 +29,7 @@ const navGroups: NavGroup[] = [
       { href: "/admin/products", label: "Products" },
       { href: "/admin/products/new", label: "Add New Product" },
       { href: "/admin/products/templates", label: "Templates" },
+      { href: "/admin/products/awards", label: "Awards" },
     ],
   },
   {
@@ -56,8 +57,11 @@ const navGroups: NavGroup[] = [
   },
 ];
 
+const EXACT_MATCH_HREFS = new Set(["/admin/products"]);
+
 function isChildActive(href: string, pathname: string): boolean {
   if (pathname === href) return true;
+  if (EXACT_MATCH_HREFS.has(href)) return false;
   // Parent-style links (e.g. /admin/posts, /admin/products): active when pathname is a subpath
   // but not when pathname is another child’s exact path (e.g. /admin/posts/new)
   if (pathname.startsWith(href + "/")) {

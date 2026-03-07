@@ -15,6 +15,7 @@ export type ProductBoxConfig = {
   imageType?: ProductBoxImageType;
   descriptionOverride?: string;
   showReleaseDate?: boolean;
+  showAward?: boolean;
 };
 
 export const DEFAULT_PRODUCT_BOX_CONFIG: ProductBoxConfig = {
@@ -28,6 +29,7 @@ export const DEFAULT_PRODUCT_BOX_CONFIG: ProductBoxConfig = {
   imageType: "transparent",
   descriptionOverride: "",
   showReleaseDate: true,
+  showAward: true,
 };
 
 export const PRODUCT_BOX_EDIT_EVENT = "edit-product-box";
@@ -50,6 +52,7 @@ function parseConfig(raw: string | undefined): ProductBoxConfig {
           ? parsed.imageType
           : "transparent",
       descriptionOverride: typeof parsed.descriptionOverride === "string" ? parsed.descriptionOverride : "",
+      showAward: typeof parsed.showAward === "boolean" ? parsed.showAward : true,
     };
   } catch {
     return { ...DEFAULT_PRODUCT_BOX_CONFIG };

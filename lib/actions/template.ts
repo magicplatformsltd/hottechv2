@@ -48,6 +48,7 @@ export async function upsertTemplate(
   const id = data.id?.trim();
   const spec_schema = Array.isArray(data.spec_schema) ? data.spec_schema : [];
   const score_schema = Array.isArray(data.score_schema) ? data.score_schema : [];
+  const key_specs = Array.isArray(data.key_specs) ? data.key_specs.filter((k): k is string => typeof k === "string") : [];
 
   if (id) {
     const { data: updated, error } = await client
@@ -57,6 +58,7 @@ export async function upsertTemplate(
         slug: data.slug,
         spec_schema,
         score_schema,
+        key_specs,
       })
       .eq("id", id)
       .select()
@@ -83,6 +85,7 @@ export async function upsertTemplate(
       slug,
       spec_schema,
       score_schema,
+      key_specs,
     })
     .select()
     .single();

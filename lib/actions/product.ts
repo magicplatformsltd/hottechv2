@@ -17,6 +17,7 @@ function toProductRow(data: Partial<Product>): Record<string, unknown> {
   if (data.category_id !== undefined) row.category_id = data.category_id ?? null;
   if (data.seo_title !== undefined) row.seo_title = data.seo_title ?? null;
   if (data.seo_description !== undefined) row.seo_description = data.seo_description ?? null;
+  if (data.award_id !== undefined) row.award_id = data.award_id ?? null;
   if (data.specs !== undefined) row.specs = data.specs ?? {};
   if (data.affiliate_links !== undefined) row.affiliate_links = data.affiliate_links ?? {};
   if (data.editorial_data !== undefined) row.editorial_data = data.editorial_data ?? {};
