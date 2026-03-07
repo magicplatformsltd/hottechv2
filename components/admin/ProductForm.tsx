@@ -3,7 +3,9 @@
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { RefreshCw, Eye } from "lucide-react";
+import { RefreshCw, Eye, Pencil, Calendar } from "lucide-react";
+import { formatDistanceToNow, differenceInHours } from "date-fns";
+import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import { upsertProduct, publishProductDraft } from "@/lib/actions/product";
 import type { Product, ProductSpecsNested, EditorialData, ProductTemplate, AffiliateLink, VariantMatrixEntry, IpRatingEntry, BooleanWithDetails, CameraLensData, DisplayPanelData } from "@/lib/types/product";
 import type { ProductSpecsInput } from "@/lib/types/product";
@@ -15,6 +17,43 @@ import type { CategoryRow } from "@/lib/actions/categories";
 import { UniversalImagePicker } from "@/app/components/admin/shared/UniversalImagePicker";
 import { ChevronDown } from "lucide-react";
 import { toast } from "sonner";
+import { PRODUCT_PUBLISH_TIMEZONE } from "@/lib/constants/datetime";
+
+function toDatetimeLocalInTz(iso: string | null, timezone: string): string {
+  if (!iso) return "";
+  try {
+    return formatInTimeZone(new Date(iso), timezone, "yyyy-MM-dd'T'HH:mm");
+  } catch {
+    return "";
+  }
+}
+
+function fromDatetimeLocalToUtc(localStr: string, timezone: string): string {
+  if (!localStr || localStr.length < 16) return "";
+  try {
+    const [datePart, timePart] = localStr.split("T");
+    const [y, m, d] = (datePart ?? "").split("-").map(Number);
+    const [h, min] = (timePart ?? "").split(":").map(Number);
+    const localDate = new Date(y, (m ?? 1) - 1, d ?? 1, h ?? 0, min ?? 0, 0);
+    return fromZonedTime(localDate, timezone).toISOString();
+  } catch {
+    return "";
+  }
+}
+
+function getTimezoneLabel(timezone: string): string {
+  try {
+    return formatInTimeZone(new Date(), timezone, "zzz");
+  } catch {
+    return timezone;
+  }
+}
+
+/** Return datetime-local string for now + 24 hours in the given timezone. */
+function getDefaultScheduledTimeLocal(timezone: string): string {
+  const in24 = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  return formatInTimeZone(in24, timezone, "yyyy-MM-dd'T'HH:mm");
+}
 
 type ProductFormProps = {
   product: Product | null;
@@ -366,6 +405,19 @@ export function ProductForm({ product, templates = [], categories = [], awards =
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState("");
+  const [publishDateLocal, setPublishDateLocal] = useState(() =>
+    toDatetimeLocalInTz(product?.published_at ?? null, PRODUCT_PUBLISH_TIMEZONE)
+  );
+
+  type StatusDropdownValue = "draft" | "pending_review" | "published" | "scheduled";
+  const [statusDropdown, setStatusDropdown] = useState<StatusDropdownValue>(() => {
+    const draft = product?.draft_data;
+    const s = (draft?.status ?? product?.status) as string | undefined;
+    const at = draft?.published_at ?? product?.published_at;
+    if (s === "published" && at && new Date(at) > new Date()) return "scheduled";
+    if (s === "pending_review" || s === "published" || s === "draft") return s as StatusDropdownValue;
+    return "draft";
+  });
 
   const selectedTemplate = templates.find((t) => t.id === templateId);
   const previewUrl =
@@ -373,6 +425,38 @@ export function ProductForm({ product, templates = [], categories = [], awards =
       ? `/${selectedTemplate.slug}/${product.slug}?preview=true`
       : null;
   const canPublish = Boolean(product?.id && (product.draft_data || product.status !== "published"));
+
+  const isScheduled = (() => {
+    if (!publishDateLocal) return false;
+    const utc = fromDatetimeLocalToUtc(publishDateLocal, PRODUCT_PUBLISH_TIMEZONE);
+    return !!utc && new Date(utc) > new Date();
+  })();
+
+  useEffect(() => {
+    const at = product?.draft_data?.published_at ?? product?.published_at ?? null;
+    setPublishDateLocal(toDatetimeLocalInTz(at, PRODUCT_PUBLISH_TIMEZONE));
+  }, [product?.id, product?.published_at, product?.draft_data?.published_at]);
+
+  useEffect(() => {
+    const draft = product?.draft_data;
+    const s = (draft?.status ?? product?.status) as string | undefined;
+    const at = draft?.published_at ?? product?.published_at;
+    if (s === "published" && at && new Date(at) > new Date()) setStatusDropdown("scheduled");
+    else if (s === "pending_review" || s === "published" || s === "draft") setStatusDropdown(s as StatusDropdownValue);
+    else setStatusDropdown("draft");
+  }, [product?.id, product?.status, product?.published_at, product?.draft_data]);
+
+  const handleStatusDropdownChange = useCallback(
+    (value: StatusDropdownValue) => {
+      setStatusDropdown(value);
+      if (value === "scheduled") {
+        const utc = publishDateLocal ? fromDatetimeLocalToUtc(publishDateLocal, PRODUCT_PUBLISH_TIMEZONE) : "";
+        const isPastOrEmpty = !utc || new Date(utc) <= new Date();
+        if (isPastOrEmpty) setPublishDateLocal(getDefaultScheduledTimeLocal(PRODUCT_PUBLISH_TIMEZONE));
+      }
+    },
+    [publishDateLocal]
+  );
 
   const applyTemplateSchema = useCallback(
     (template: ProductTemplate) => {
@@ -707,8 +791,19 @@ export function ProductForm({ product, templates = [], categories = [], awards =
       specs: specGroups,
       affiliate_links: linksPayload,
       editorial_data: editorialData,
-      status: (product?.status as "draft" | "published" | "pending_review") ?? "draft",
-      published_at: product?.published_at ?? null,
+      status: (statusDropdown === "scheduled" ? "published" : statusDropdown) as "draft" | "published" | "pending_review",
+      published_at: (() => {
+        if (statusDropdown === "scheduled" && publishDateLocal) {
+          const utc = fromDatetimeLocalToUtc(publishDateLocal, PRODUCT_PUBLISH_TIMEZONE);
+          return utc || null;
+        }
+        if (statusDropdown === "published") {
+          const utc = publishDateLocal ? fromDatetimeLocalToUtc(publishDateLocal, PRODUCT_PUBLISH_TIMEZONE) : null;
+          if (utc && new Date(utc) > new Date()) return utc;
+          return new Date().toISOString();
+        }
+        return product?.published_at ?? null;
+      })(),
     };
     const result = await upsertProduct(payload);
     setSaving(false);
@@ -720,6 +815,12 @@ export function ProductForm({ product, templates = [], categories = [], awards =
       product?.status === "draft" || product?.status === "pending_review";
     if (product && wasDraftOrPending) {
       toast.success("Draft Saved");
+    } else if (product?.id) {
+      toast.success("Product updated");
+    }
+    if (product?.id) {
+      router.refresh();
+      return;
     }
     if (onSuccess) {
       onSuccess();
@@ -744,57 +845,134 @@ export function ProductForm({ product, templates = [], categories = [], awards =
       )}
 
       {hasTemplate && (
-        <div className="sticky top-0 z-50 flex justify-between items-center bg-gray-900/95 backdrop-blur py-4 border-b border-white/10 mb-8 px-4 -mx-4 rounded-b">
-          <div className="flex items-center gap-3">
-            {previewUrl && (
-              <Link
-                href={previewUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 rounded-md border border-white/20 bg-white/5 py-2 px-4 font-sans text-sm font-medium text-hot-white transition-colors hover:bg-white/10"
+        <div className="sticky top-0 z-[100] w-full bg-gray-900/95 backdrop-blur border-b border-white/10 h-[82px] flex flex-col justify-center px-6">
+          {/* Row 1: Interactive Elements — vertically centered */}
+          <div className="flex items-center justify-between w-full min-h-[40px]">
+            <div className="flex items-center gap-4">
+              <div className="w-[200px]">
+                {product && (
+                  <input
+                    type="datetime-local"
+                    value={publishDateLocal}
+                    onChange={(e) => setPublishDateLocal(e.target.value)}
+                    className="w-full rounded-md border border-white/20 bg-white/5 px-3 py-2 font-sans text-sm text-hot-white focus:border-hot-white/50 focus:outline-none focus:ring-1 focus:ring-hot-white/30"
+                    aria-label="Publish date"
+                  />
+                )}
+              </div>
+              <div className="w-[140px]">
+                {product && (
+                  <select
+                    value={statusDropdown}
+                    onChange={(e) => handleStatusDropdownChange(e.target.value as StatusDropdownValue)}
+                    className="w-full rounded-md border border-white/20 bg-white/5 px-3 py-2 font-sans text-sm text-hot-white focus:border-hot-white/50 focus:outline-none focus:ring-1 focus:ring-hot-white/30"
+                    aria-label="Status"
+                  >
+                    <option value="draft">Draft</option>
+                    <option value="pending_review">Pending Review</option>
+                    <option value="published">Published</option>
+                    <option value="scheduled">Scheduled</option>
+                  </select>
+                )}
+              </div>
+              {statusDropdown === "scheduled" && product && (() => {
+                const utc = publishDateLocal ? fromDatetimeLocalToUtc(publishDateLocal, PRODUCT_PUBLISH_TIMEZONE) : "";
+                const isPastOrEmpty = !utc || new Date(utc) <= new Date();
+                return isPastOrEmpty ? (
+                  <span className="font-sans text-[10px] text-amber-400 leading-tight">Set a future date for Scheduled</span>
+                ) : null;
+              })()}
+            </div>
+
+            <div className="flex items-center gap-3">
+              {previewUrl && (
+                <Link
+                  href={previewUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center justify-center gap-2 rounded-md border border-white/20 bg-white/5 py-2 px-4 font-sans text-sm font-medium text-hot-white transition-colors hover:bg-white/10"
+                >
+                  <Eye className="h-4 w-4" />
+                  Preview
+                </Link>
+              )}
+              {product?.id && (
+                <button
+                  type="button"
+                  disabled={publishing}
+                  onClick={async () => {
+                    if (!product?.id) return;
+                    setPublishing(true);
+                    setError("");
+                    const utcIso = publishDateLocal
+                      ? fromDatetimeLocalToUtc(publishDateLocal, PRODUCT_PUBLISH_TIMEZONE)
+                      : undefined;
+                    const result = await publishProductDraft(product.id, utcIso || undefined);
+                    setPublishing(false);
+                    if (result.error) {
+                      setError(result.error);
+                      return;
+                    }
+                    if (isScheduled && utcIso) {
+                      toast.success(
+                        `Scheduled for ${formatInTimeZone(new Date(utcIso), PRODUCT_PUBLISH_TIMEZONE, "MMM d, yyyy 'at' h:mm a zzz")}`
+                      );
+                    } else {
+                      toast.success("Published");
+                    }
+                    router.refresh();
+                  }}
+                  className="flex items-center justify-center gap-2 rounded-md bg-green-600 px-4 py-2 font-sans text-sm font-medium text-white transition-colors hover:bg-green-500 disabled:opacity-50 shrink-0"
+                >
+                  {publishing ? (isScheduled ? "Scheduling…" : "Publishing…") : isScheduled ? "Schedule" : "Publish"}
+                </button>
+              )}
+              {product && (
+                <div className="hidden sm:flex flex-col items-end gap-0.5 mr-2 shrink-0 min-w-[160px]">
+                  <div className="flex items-center gap-1.5 font-sans text-xs text-gray-400">
+                    <Calendar className="h-3.5 w-3.5 shrink-0 text-gray-500" aria-hidden />
+                    {(product.published_at ?? product.draft_data?.published_at)
+                      ? formatInTimeZone(
+                          new Date((product.published_at ?? product.draft_data?.published_at) as string),
+                          PRODUCT_PUBLISH_TIMEZONE,
+                          "MMM d, yyyy • HH:mm"
+                        )
+                      : "Not yet published"}
+                  </div>
+                  <div className="flex items-center gap-1.5 font-sans text-xs text-gray-500">
+                    <Pencil className="h-3 w-3 shrink-0" />
+                    {product.updated_at
+                      ? differenceInHours(new Date(), new Date(product.updated_at)) < 48
+                        ? `Saved ${formatDistanceToNow(new Date(product.updated_at), { addSuffix: true })}`
+                        : formatInTimeZone(new Date(product.updated_at), PRODUCT_PUBLISH_TIMEZONE, "MMM d, yyyy • HH:mm")
+                      : "—"}
+                  </div>
+                </div>
+              )}
+              <button
+                type="submit"
+                disabled={saving}
+                className="rounded-md bg-hot-white px-4 py-2 font-sans text-sm font-medium text-hot-black transition-colors hover:bg-hot-white/90 disabled:opacity-50 shrink-0"
               >
-                <Eye className="h-4 w-4" />
-                Preview
-              </Link>
-            )}
-            {canPublish && (
+                {saving ? "Saving…" : product ? "Update Product" : "Create Product"}
+              </button>
               <button
                 type="button"
-                disabled={publishing}
-                onClick={async () => {
-                  if (!product?.id) return;
-                  setPublishing(true);
-                  setError("");
-                  const result = await publishProductDraft(product.id);
-                  setPublishing(false);
-                  if (result.error) {
-                    setError(result.error);
-                    return;
-                  }
-                  router.refresh();
-                }}
-                className="flex items-center justify-center gap-2 rounded-md bg-green-600 px-4 py-2 font-sans text-sm font-medium text-white transition-colors hover:bg-green-500 disabled:opacity-50"
+                onClick={() => router.push("/admin/products")}
+                className="rounded-md border border-white/20 px-4 py-2 font-sans text-sm text-gray-400 bg-white/5 hover:bg-white/10 hover:text-hot-white shrink-0"
               >
-                {publishing ? "Publishing…" : "Publish"}
+                Cancel
               </button>
-            )}
+            </div>
           </div>
-          <div className="flex gap-3">
-            <button
-              type="submit"
-              disabled={saving}
-              className="rounded-md bg-hot-white px-4 py-2 font-sans text-sm font-medium text-hot-black transition-colors hover:bg-hot-white/90 disabled:opacity-50"
-            >
-              {saving ? "Saving…" : product ? "Update Product" : "Create Product"}
-            </button>
-            <button
-              type="button"
-              onClick={() => router.push("/admin/products")}
-              className="rounded-md border border-white/20 px-4 py-2 font-sans text-sm text-gray-400 bg-white/5 hover:bg-white/10 hover:text-hot-white"
-            >
-              Cancel
-            </button>
-          </div>
+
+          {/* Row 2: Static Labels — directly beneath inputs, fixed height so they don't push Row 1 */}
+          {product && (
+            <div className="flex gap-4 mt-1 h-[14px] items-center">
+              <span className="text-[10px] text-gray-500 w-[200px] pl-1 shrink-0">Publish Date (EST)</span>
+              <span className="text-[10px] text-gray-500 w-[140px] shrink-0">Status</span>
+            </div>
+          )}
         </div>
       )}
 
@@ -836,6 +1014,22 @@ export function ProductForm({ product, templates = [], categories = [], awards =
                 <h2 className="font-sans text-lg font-medium text-hot-white">
                   Basic info
                 </h2>
+                {product && (() => {
+                  const at = product.draft_data?.published_at ?? product.published_at;
+                  const isScheduledRelease =
+                    (product.draft_data?.status ?? product.status) === "published" &&
+                    at &&
+                    new Date(at) > new Date();
+                  if (!isScheduledRelease) return null;
+                  const formatted = at
+                    ? formatInTimeZone(new Date(at), PRODUCT_PUBLISH_TIMEZONE, "MMM d, yyyy 'at' h:mm a zzz")
+                    : "";
+                  return (
+                    <div className="rounded-md border border-blue-500/20 bg-blue-500/10 px-3 py-2 font-sans text-sm text-blue-200">
+                      Scheduled for {formatted}
+                    </div>
+                  );
+                })()}
                 <div>
                   <label className={labelClass}>Name</label>
                   <input

@@ -61,6 +61,8 @@ function buildDraftDataFromPayload(data: Partial<Product>): ProductDraftData {
     security_updates_years: data.security_updates_years ?? undefined,
     category_id: data.category_id ?? undefined,
     award_id: data.award_id ?? undefined,
+    status: data.status ?? undefined,
+    published_at: data.published_at ?? undefined,
   };
 }
 
@@ -301,7 +303,11 @@ export async function upsertProduct(
 
     if (isDraftOrPending) {
       const draft_data = buildDraftDataFromPayload(data);
-      const row = toProductRow({ draft_data });
+      const row = toProductRow({
+        draft_data,
+        published_at: data.published_at !== undefined ? data.published_at ?? null : current?.published_at ?? null,
+        status: data.status !== undefined ? data.status ?? "draft" : (current?.status ?? "draft"),
+      });
       const { data: updated, error } = await client
         .from("products")
         .update(row)
@@ -520,10 +526,15 @@ async function doImportProduct(
 }
 
 /**
- * Publish draft: merge draft_data into live columns, clear draft_data, set status to published and published_at to now.
- * Call from the product edit page "Publish" button.
+ * Publish draft: merge draft_data into live columns, clear draft_data, set status to published (or scheduled when date is in the future).
+ * Call from the product edit page "Publish" / "Schedule" button.
+ * @param id - Product id
+ * @param publishedAt - Optional ISO date string; if in the future, product is scheduled (status remains "published", badge shows "Scheduled").
  */
-export async function publishProductDraft(id: string): Promise<{ product?: Product; error?: string }> {
+export async function publishProductDraft(
+  id: string,
+  publishedAt?: string | null
+): Promise<{ product?: Product; error?: string }> {
   const client = await createClient();
   const {
     data: { user },
@@ -538,6 +549,8 @@ export async function publishProductDraft(id: string): Promise<{ product?: Produ
   }
 
   const draft = product.draft_data;
+  const at = (publishedAt ?? "").trim();
+  const useDate = at ? new Date(at) : new Date();
   const merged: Partial<Product> = {
     name: (draft?.name ?? product.name) ?? "",
     brand: (draft?.brand ?? product.brand) ?? "",
@@ -558,7 +571,7 @@ export async function publishProductDraft(id: string): Promise<{ product?: Produ
     affiliate_links: (draft?.affiliate_links ?? product.affiliate_links) ?? [],
     editorial_data: (draft?.editorial_data ?? product.editorial_data) ?? {},
     status: "published",
-    published_at: new Date().toISOString(),
+    published_at: useDate.toISOString(),
     draft_data: null,
   };
 

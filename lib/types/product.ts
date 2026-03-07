@@ -215,6 +215,8 @@ export type ProductDraftData = Partial<{
   specs: ProductSpecsInput;
   affiliate_links: AffiliateLinks;
   editorial_data: EditorialData;
+  status: string | null;
+  published_at: string | null;
 }>;
 
 export type Product = {

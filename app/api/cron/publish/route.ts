@@ -4,8 +4,11 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/utils/supabase/server";
 
 /**
- * Cron: Bust cache when scheduled posts go live.
- * Runs every minute; finds posts that crossed the embargo threshold in the last 2 minutes.
+ * Cron: Bust cache when scheduled posts and products go live.
+ * Runs every minute; finds items whose published_at crossed into the past in the last 2 minutes.
+ * (1) Posts with status published and published_at in window → revalidate.
+ * (2) Products with status published and published_at in window → revalidate.
+ * One failure does not stop the other.
  */
 export async function GET() {
   const headersList = await headers();
@@ -22,29 +25,56 @@ export async function GET() {
   const twoMinutesAgoIso = twoMinutesAgo.toISOString();
 
   const supabase = await createClient();
-  const { data: posts, error } = await supabase
-    .from("posts")
-    .select("id")
-    .eq("status", "published")
-    .gte("published_at", twoMinutesAgoIso)
-    .lte("published_at", nowIso);
+  let postsWentLive = 0;
+  let productsWentLive = 0;
+  const postIds: string[] = [];
+  const productIds: string[] = [];
 
-  if (error) {
-    console.error("[cron/publish]", error);
-    return NextResponse.json(
-      { error: error.message, revalidated: false },
-      { status: 500 }
-    );
+  try {
+    const { data: posts, error } = await supabase
+      .from("posts")
+      .select("id")
+      .eq("status", "published")
+      .gte("published_at", twoMinutesAgoIso)
+      .lte("published_at", nowIso);
+
+    if (error) {
+      console.error("[cron/publish] posts", error);
+    } else {
+      postsWentLive = posts?.length ?? 0;
+      if (posts?.length) postIds.push(...posts.map((p) => p.id));
+      if (postsWentLive > 0) revalidatePath("/", "layout");
+    }
+  } catch (err) {
+    console.error("[cron/publish] posts error", err);
   }
 
-  const count = posts?.length ?? 0;
-  if (count > 0) {
-    revalidatePath("/", "layout");
+  try {
+    const { data: products, error } = await supabase
+      .from("products")
+      .select("id")
+      .eq("status", "published")
+      .gte("published_at", twoMinutesAgoIso)
+      .lte("published_at", nowIso);
+
+    if (error) {
+      console.error("[cron/publish] products", error);
+    } else {
+      productsWentLive = products?.length ?? 0;
+      if (products?.length) productIds.push(...products.map((p) => p.id));
+      if (productsWentLive > 0) revalidatePath("/", "layout");
+    }
+  } catch (err) {
+    console.error("[cron/publish] products error", err);
   }
+
+  const revalidated = postsWentLive > 0 || productsWentLive > 0;
 
   return NextResponse.json({
-    postsWentLive: count,
-    revalidated: count > 0,
-    postIds: (posts ?? []).map((p) => p.id),
+    postsWentLive,
+    productsWentLive,
+    revalidated,
+    postIds,
+    productIds,
   });
 }
