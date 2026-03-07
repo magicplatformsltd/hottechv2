@@ -236,6 +236,10 @@ export type Product = {
   brand_id: string | null;
   /** Joined from brands table (Supabase alias: brands). */
   brands?: Brand | null;
+  /** Joined from categories table (products.category_id). */
+  categories?: { id?: number; name?: string; slug?: string } | null;
+  /** Joined from product_tags junction (tags nested). */
+  product_tags?: { tag_id?: number; tags?: { id: number; name: string; slug: string } }[] | null;
   slug: string;
   /** ISO date (YYYY-MM-DD) or null. */
   announcement_date?: string | null;

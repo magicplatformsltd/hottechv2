@@ -41,6 +41,20 @@ function toProductRow(data: Partial<Product>): Record<string, unknown> {
   return row;
 }
 
+/** Sync product_tags junction: delete existing, insert tag_ids. */
+async function syncProductTags(
+  client: SupabaseClient,
+  productId: string,
+  tagIds: number[]
+): Promise<void> {
+  await client.from("product_tags").delete().eq("product_id", productId);
+  if (tagIds.length > 0) {
+    await client
+      .from("product_tags")
+      .insert(tagIds.map((tag_id) => ({ product_id: productId, tag_id })));
+  }
+}
+
 /** Build ProductDraftData from form/update payload for storing in draft_data column. */
 function buildDraftDataFromPayload(data: Partial<Product>): ProductDraftData {
   return {
@@ -226,7 +240,7 @@ export async function getProducts(): Promise<Product[]> {
   const client = await createClient();
   const { data, error } = await client
     .from("products")
-    .select("*")
+    .select("*, brands(*), categories(*), product_tags(tags(id, name, slug))")
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -241,7 +255,7 @@ export async function getProductById(id: string): Promise<Product | null> {
   const client = await createClient();
   const { data, error } = await client
     .from("products")
-    .select("*, brands(*)")
+    .select("*, brands(*), categories(*), product_tags(tags(id, name, slug))")
     .eq("id", id.trim())
     .maybeSingle();
 
@@ -285,7 +299,7 @@ export async function getProductsByTemplateId(templateId: string): Promise<Produ
 }
 
 export async function upsertProduct(
-  data: Partial<Product>
+  data: Partial<Product> & { tag_ids?: number[] }
 ): Promise<{ product?: Product; error?: string }> {
   const client = await createClient();
   const {
@@ -295,7 +309,10 @@ export async function upsertProduct(
     return { error: "Unauthorized." };
   }
 
-  const id = data.id?.trim();
+  const tagIds = Array.isArray(data.tag_ids) ? data.tag_ids.filter((n) => Number.isInteger(n) && n > 0) : [];
+  const { tag_ids: _tagIds, ...rowData } = data;
+
+  const id = rowData.id?.trim();
 
   if (id) {
     const current = await getProductById(id);
@@ -303,53 +320,55 @@ export async function upsertProduct(
       current?.status === "draft" || current?.status === "pending_review";
 
     if (isDraftOrPending) {
-      const draft_data = buildDraftDataFromPayload(data);
+      const draft_data = buildDraftDataFromPayload(rowData);
       const row = toProductRow({
         draft_data,
-        published_at: data.published_at !== undefined ? data.published_at ?? null : current?.published_at ?? null,
-        status: data.status !== undefined ? data.status ?? "draft" : (current?.status ?? "draft"),
+        published_at: rowData.published_at !== undefined ? rowData.published_at ?? null : current?.published_at ?? null,
+        status: rowData.status !== undefined ? rowData.status ?? "draft" : (current?.status ?? "draft"),
       });
       const { data: updated, error } = await client
         .from("products")
         .update(row)
         .eq("id", id)
-        .select()
+        .select("*, brands(*), categories(*), product_tags(tags(id, name, slug))")
         .single();
 
       if (error) {
         console.error("[upsertProduct] update draft_data", error);
         return { error: error.message };
       }
+      await syncProductTags(client, id, tagIds);
       revalidatePath("/admin/products");
       revalidatePath(`/admin/products/${id}`);
       revalidatePath("/");
       return { product: updated as Product };
     }
 
-    const row = toProductRow(data);
+    const row = toProductRow(rowData);
     const { data: updated, error } = await client
       .from("products")
       .update(row)
       .eq("id", id)
-      .select()
+      .select("*, brands(*), categories(*), product_tags(tags(id, name, slug))")
       .single();
 
     if (error) {
       console.error("[upsertProduct] update", error);
       return { error: error.message };
     }
+    await syncProductTags(client, id, tagIds);
     revalidatePath("/admin/products");
     revalidatePath("/");
     return { product: updated as Product };
   }
 
-  const name = (data.name ?? "").trim();
-  const brandId = data.brand_id ?? null;
-  const slug = (data.slug ?? "").trim();
+  const name = (rowData.name ?? "").trim();
+  const brandId = rowData.brand_id ?? null;
+  const slug = (rowData.slug ?? "").trim();
   if (!name || !slug) {
     return { error: "name and slug are required to create a product." };
   }
-  if (!brandId && !data.id) {
+  if (!brandId && !rowData.id) {
     return { error: "Brand is required to create a product." };
   }
 
@@ -357,37 +376,39 @@ export async function upsertProduct(
     name,
     brand_id: brandId,
     slug,
-    announcement_date: data.announcement_date ?? null,
-    release_date: data.release_date ?? null,
-    discontinued_date: data.discontinued_date ?? null,
-    software_updates_years: data.software_updates_years ?? null,
-    security_updates_years: data.security_updates_years ?? null,
-    hero_image: data.hero_image ?? null,
-    transparent_image: data.transparent_image ?? null,
-    template_id: data.template_id ?? null,
-    category_id: data.category_id ?? null,
-    seo_title: data.seo_title ?? null,
-    seo_description: data.seo_description ?? null,
-    award_id: data.award_id ?? null,
-    specs: (data.specs ?? {}) as ProductSpecs,
-    affiliate_links: (data.affiliate_links ?? []) as AffiliateLinks,
-    editorial_data: (data.editorial_data ?? {}) as EditorialData,
-    status: data.status ?? "draft",
-    published_at: data.published_at ?? null,
-    draft_data: data.draft_data ?? null,
+    announcement_date: rowData.announcement_date ?? null,
+    release_date: rowData.release_date ?? null,
+    discontinued_date: rowData.discontinued_date ?? null,
+    software_updates_years: rowData.software_updates_years ?? null,
+    security_updates_years: rowData.security_updates_years ?? null,
+    hero_image: rowData.hero_image ?? null,
+    transparent_image: rowData.transparent_image ?? null,
+    template_id: rowData.template_id ?? null,
+    category_id: rowData.category_id ?? null,
+    seo_title: rowData.seo_title ?? null,
+    seo_description: rowData.seo_description ?? null,
+    award_id: rowData.award_id ?? null,
+    specs: (rowData.specs ?? {}) as ProductSpecs,
+    affiliate_links: (rowData.affiliate_links ?? []) as AffiliateLinks,
+    editorial_data: (rowData.editorial_data ?? {}) as EditorialData,
+    status: rowData.status ?? "draft",
+    published_at: rowData.published_at ?? null,
+    draft_data: rowData.draft_data ?? null,
   };
   const insertRow = toProductRow(insertPayload);
 
   const { data: created, error } = await client
     .from("products")
     .insert(insertRow)
-    .select()
+    .select("*, brands(*), categories(*), product_tags(tags(id, name, slug))")
     .single();
 
   if (error) {
     console.error("[upsertProduct] insert", error);
     return { error: error.message };
   }
+  const productId = (created as { id?: string })?.id;
+  if (productId) await syncProductTags(client, productId, tagIds);
   revalidatePath("/admin/products");
   revalidatePath("/");
   return { product: created as Product };

@@ -41,7 +41,7 @@ export function ProductsTable({ products }: ProductsTableProps) {
   if (products.length === 0) {
     return (
       <tr>
-        <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
+        <td colSpan={8} className="px-4 py-8 text-center text-gray-400">
           No products yet.{" "}
           <Link href="/admin/products/new" className="text-hot-white hover:underline">
             Add one
@@ -84,8 +84,28 @@ export function ProductsTable({ products }: ProductsTableProps) {
           <td className="w-32 shrink-0 px-4 py-3 text-gray-400 align-top">
             {product.brands?.name ?? "—"}
           </td>
+          <td className="w-28 shrink-0 px-4 py-3 text-gray-400 align-top">
+            {product.categories?.name ?? "—"}
+          </td>
           <td className="w-28 shrink-0 px-4 py-3 text-right align-top">
             <StatusBadge status={product.status} publishedAt={product.published_at} />
+          </td>
+          <td className="w-32 shrink-0 px-4 py-3 align-top">
+            <div className="flex flex-wrap gap-1">
+              {(product.product_tags ?? [])
+                .filter((pt) => pt.tags?.id != null && pt.tags?.name != null)
+                .map((pt) => (
+                  <span
+                    key={pt.tags!.id}
+                    className="inline-flex rounded-full bg-white/10 px-2 py-0.5 font-sans text-xs text-gray-300"
+                  >
+                    {pt.tags!.name}
+                  </span>
+                ))}
+              {((product.product_tags ?? []).length === 0) && (
+                <span className="text-gray-500">—</span>
+              )}
+            </div>
           </td>
           <td className="w-44 shrink-0 px-4 py-3 align-top text-right">
             <div className="text-gray-400">

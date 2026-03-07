@@ -8,6 +8,8 @@ import { formatDistanceToNow, differenceInHours } from "date-fns";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import { upsertProduct, publishProductDraft } from "@/lib/actions/product";
 import { createBrand } from "@/lib/actions/brand";
+import { createTag } from "@/lib/actions/tags";
+import { TagInput, type SelectedTag } from "@/app/components/admin/posts/TagInput";
 import type { Product, Brand, ProductSpecsNested, EditorialData, ProductTemplate, AffiliateLink, VariantMatrixEntry, IpRatingEntry, BooleanWithDetails, CameraLensData, DisplayPanelData } from "@/lib/types/product";
 import type { ProductSpecsInput } from "@/lib/types/product";
 import { getSpecLabelsFromSchema, getTemplateSchemaAsGroups } from "@/lib/types/template";
@@ -59,6 +61,7 @@ function getDefaultScheduledTimeLocal(timezone: string): string {
 type ProductFormProps = {
   product: Product | null;
   brands?: Brand[];
+  tags?: { id: number; name: string | null; slug: string | null }[];
   templates?: ProductTemplate[];
   categories?: CategoryRow[];
   awards?: ProductAwardRecord[];
@@ -319,11 +322,22 @@ function mergeDraftOverProduct(product: Product | null): Partial<Product> {
   return { ...p, ...draft } as Partial<Product>;
 }
 
-export function ProductForm({ product, brands = [], templates = [], categories = [], awards = [], onSuccess }: ProductFormProps) {
+export function ProductForm({ product, brands = [], tags = [], templates = [], categories = [], awards = [], onSuccess }: ProductFormProps) {
   const router = useRouter();
   const initial = useMemo(() => mergeDraftOverProduct(product), [product]);
 
   const categoryOptions = useMemo(() => buildCategoryTreeOptions(categories), [categories]);
+  const availableTagOptions = useMemo(
+    () => tags.map((t) => ({ id: t.id, name: t.name ?? "", slug: t.slug ?? "" })),
+    [tags]
+  );
+  const initialProductTags = useMemo(() => {
+    const pt = product?.product_tags ?? [];
+    return pt
+      .map((p) => p.tags)
+      .filter((t): t is { id: number; name: string; slug: string } => t != null && typeof t.id === "number")
+      .map((t) => ({ id: t.id, name: t.name ?? "" }));
+  }, [product?.product_tags]);
 
   const [templateId, setTemplateId] = useState<string | "">(
     initial.template_id ?? ""
@@ -343,6 +357,7 @@ export function ProductForm({ product, brands = [], templates = [], categories =
     return "";
   });
   const [newBrandName, setNewBrandName] = useState("");
+  const [selectedTags, setSelectedTags] = useState<SelectedTag[]>(initialProductTags);
   const [slug, setSlug] = useState(initial.slug ?? "");
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(Boolean(initial.slug?.trim()));
   const [announcementDate, setAnnouncementDate] = useState(
@@ -519,6 +534,10 @@ export function ProductForm({ product, brands = [], templates = [], categories =
       applyTemplateSchema(template);
     }
   }, [templateId, templates, applyTemplateSchema]);
+
+  useEffect(() => {
+    setSelectedTags(initialProductTags);
+  }, [initialProductTags]);
 
   useEffect(() => {
     const nextSlug = slugify(name);
@@ -795,7 +814,23 @@ export function ProductForm({ product, brands = [], templates = [], categories =
       resolvedBrandId = created.id;
     }
 
-    const payload: Partial<Product> = {
+    const newTags = selectedTags.filter((t) => t.isNew);
+    const existingTagIds = selectedTags.filter((t) => !t.isNew).map((t) => t.id);
+    const createdTagIds: number[] = [];
+    for (const t of newTags) {
+      const fd = new FormData();
+      fd.set("name", t.name ?? "");
+      const res = await createTag(fd);
+      if (res.error) {
+        setError(res.error ?? "Failed to create tag.");
+        setSaving(false);
+        return;
+      }
+      if (res.id != null) createdTagIds.push(res.id);
+    }
+    const tag_ids = [...existingTagIds, ...createdTagIds];
+
+    const payload: Partial<Product> & { tag_ids?: number[] } = {
       ...(product?.id ? { id: product.id } : {}),
       name: name.trim(),
       brand_id: resolvedBrandId,
@@ -834,6 +869,7 @@ export function ProductForm({ product, brands = [], templates = [], categories =
         }
         return product?.published_at ?? null;
       })(),
+      tag_ids,
     };
     const result = await upsertProduct(payload);
     setSaving(false);
@@ -1203,6 +1239,14 @@ export function ProductForm({ product, brands = [], templates = [], categories =
                       </option>
                     ))}
                   </select>
+                </div>
+                <div>
+                  <label className={labelClass}>Tags</label>
+                  <TagInput
+                    availableTags={availableTagOptions}
+                    selectedTags={selectedTags}
+                    onChange={setSelectedTags}
+                  />
                 </div>
               </section>
 

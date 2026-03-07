@@ -33,8 +33,14 @@ export default async function AdminProductsPage() {
                 <th className="w-32 shrink-0 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
                   Brand
                 </th>
+                <th className="w-28 shrink-0 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
+                  Category
+                </th>
                 <th className="w-28 shrink-0 px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-400">
                   Status
+                </th>
+                <th className="w-32 shrink-0 px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-400">
+                  Tags
                 </th>
                 <th className="w-44 shrink-0 px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-400">
                   Timeline
