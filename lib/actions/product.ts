@@ -13,6 +13,10 @@ function toProductRow(data: Partial<Product>): Record<string, unknown> {
   if (data.release_date !== undefined) row.release_date = data.release_date ?? null;
   if (data.hero_image !== undefined) row.hero_image = data.hero_image ?? null;
   if (data.transparent_image !== undefined) row.transparent_image = data.transparent_image ?? null;
+  if (data.template_id !== undefined) row.template_id = data.template_id ?? null;
+  if (data.category_id !== undefined) row.category_id = data.category_id ?? null;
+  if (data.seo_title !== undefined) row.seo_title = data.seo_title ?? null;
+  if (data.seo_description !== undefined) row.seo_description = data.seo_description ?? null;
   if (data.specs !== undefined) row.specs = data.specs ?? {};
   if (data.affiliate_links !== undefined) row.affiliate_links = data.affiliate_links ?? {};
   if (data.editorial_data !== undefined) row.editorial_data = data.editorial_data ?? {};
@@ -96,6 +100,10 @@ export async function upsertProduct(
       release_date: data.release_date ?? null,
       hero_image: data.hero_image ?? null,
       transparent_image: data.transparent_image ?? null,
+      template_id: data.template_id ?? null,
+      category_id: data.category_id ?? null,
+      seo_title: data.seo_title ?? null,
+      seo_description: data.seo_description ?? null,
       specs: (data.specs ?? {}) as ProductSpecs,
       affiliate_links: (data.affiliate_links ?? {}) as AffiliateLinks,
       editorial_data: (data.editorial_data ?? {}) as EditorialData,

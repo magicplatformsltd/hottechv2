@@ -1,26 +1,60 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { upsertProduct } from "@/lib/actions/product";
-import type { Product, ProductSpecs, EditorialData } from "@/lib/types/product";
+import type { Product, ProductSpecs, EditorialData, ProductTemplate, AffiliateLink } from "@/lib/types/product";
+import type { CategoryRow } from "@/lib/actions/categories";
 import { UniversalImagePicker } from "@/app/components/admin/shared/UniversalImagePicker";
-
-const DEFAULT_SUB_SCORE_KEYS = [
-  "Performance",
-  "Value",
-  "Design",
-  "Battery",
-  "Display",
-  "Camera",
-] as const;
 
 type ProductFormProps = {
   product: Product | null;
+  templates?: ProductTemplate[];
+  categories?: CategoryRow[];
 };
 
+type CategoryOption = { id: number; label: string };
+
+function buildCategoryTreeOptions(categories: CategoryRow[]): CategoryOption[] {
+  const byParent = new Map<number | null, CategoryRow[]>();
+  for (const c of categories) {
+    const key = c.parent_id ?? null;
+    if (!byParent.has(key)) byParent.set(key, []);
+    byParent.get(key)!.push(c);
+  }
+  const result: CategoryOption[] = [];
+  function visit(parentId: number | null, depth: number) {
+    const list = byParent.get(parentId) ?? [];
+    list.sort((a, b) => (a.name ?? "").localeCompare(b.name ?? ""));
+    const prefix = depth === 0 ? "" : "—".repeat(depth) + " ";
+    for (const c of list) {
+      result.push({ id: c.id, label: prefix + (c.name ?? "") });
+      visit(c.id, depth + 1);
+    }
+  }
+  visit(null, 0);
+  return result;
+}
+
+function normalizeAffiliateLinks(links: Product["affiliate_links"]): AffiliateLink[] {
+  if (Array.isArray(links)) {
+    return links.map((item) => ({
+      retailer: typeof item.retailer === "string" ? item.retailer : "",
+      url: typeof item.url === "string" ? item.url : "",
+      price: typeof (item as AffiliateLink).price === "string" ? (item as AffiliateLink).price : undefined,
+    }));
+  }
+  if (links && typeof links === "object" && !Array.isArray(links)) {
+    return Object.entries(links).map(([retailer, url]) => ({
+      retailer,
+      url: typeof url === "string" ? url : "",
+    }));
+  }
+  return [];
+}
+
 type SpecEntry = { key: string; value: string };
-type SubScoreEntry = { key: string; value: number };
+type SubScoreEntry = { label: string; value: number };
 
 function emptyProduct(): Partial<Product> {
   return {
@@ -53,15 +87,28 @@ function entriesToSpecs(entries: SpecEntry[]): ProductSpecs {
   return out;
 }
 
-export function ProductForm({ product }: ProductFormProps) {
+export function ProductForm({ product, templates = [], categories = [] }: ProductFormProps) {
   const router = useRouter();
   const initial = product ?? emptyProduct();
 
+  const categoryOptions = useMemo(() => buildCategoryTreeOptions(categories), [categories]);
+
+  const [templateId, setTemplateId] = useState<string | "">(
+    initial.template_id ?? ""
+  );
+  const [categoryId, setCategoryId] = useState<number | "">(
+    initial.category_id != null ? initial.category_id : ""
+  );
   const [name, setName] = useState(initial.name ?? "");
   const [brand, setBrand] = useState(initial.brand ?? "");
   const [slug, setSlug] = useState(initial.slug ?? "");
   const [releaseDate, setReleaseDate] = useState(
     initial.release_date ? initial.release_date.slice(0, 10) : ""
+  );
+  const [seoTitle, setSeoTitle] = useState(initial.seo_title ?? "");
+  const [seoDescription, setSeoDescription] = useState(initial.seo_description ?? "");
+  const [affiliateLinks, setAffiliateLinks] = useState<AffiliateLink[]>(() =>
+    normalizeAffiliateLinks(initial.affiliate_links)
   );
   const [heroImage, setHeroImage] = useState<string | null>(
     initial.hero_image ?? null
@@ -71,6 +118,9 @@ export function ProductForm({ product }: ProductFormProps) {
   );
   const [specEntries, setSpecEntries] = useState<SpecEntry[]>(() =>
     specsToEntries(initial.specs ?? {})
+  );
+  const [bottomLine, setBottomLine] = useState(
+    initial.editorial_data?.bottom_line ?? ""
   );
   const [pros, setPros] = useState<string[]>(
     initial.editorial_data?.pros?.length
@@ -85,18 +135,87 @@ export function ProductForm({ product }: ProductFormProps) {
   const [subScores, setSubScores] = useState<SubScoreEntry[]>(() => {
     const ed = initial.editorial_data?.sub_scores;
     if (ed && Object.keys(ed).length > 0) {
-      return Object.entries(ed).map(([key, value]) => ({
-        key,
+      return Object.entries(ed).map(([label, value]) => ({
+        label,
         value: Number(value) || 0,
       }));
     }
-    return DEFAULT_SUB_SCORE_KEYS.map((key) => ({ key, value: 0 }));
+    return [];
   });
   const [finalScore, setFinalScore] = useState<number>(
     initial.editorial_data?.final_score ?? 0
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+
+  const selectedTemplate = templates.find((t) => t.id === templateId);
+
+  const applyTemplateSchema = useCallback(
+    (template: ProductTemplate) => {
+      const specLabels = Array.isArray(template.spec_schema)
+        ? template.spec_schema.filter((s): s is string => typeof s === "string" && String(s).trim() !== "")
+        : [];
+      const scoreLabels = Array.isArray(template.score_schema)
+        ? template.score_schema.filter((s): s is string => typeof s === "string" && String(s).trim() !== "")
+        : [];
+
+      setSpecEntries((prev) => {
+        const existingByKey = Object.fromEntries(
+          prev.filter((e) => e.key.trim()).map((e) => [e.key.trim(), e.value])
+        );
+        const templateKeySet = new Set(specLabels);
+        const next: SpecEntry[] = specLabels.map((label) => ({
+          key: String(label),
+          value: existingByKey[label] ?? "",
+        }));
+        for (const e of prev) {
+          const k = e.key.trim();
+          if (k && !templateKeySet.has(k)) {
+            next.push({ key: e.key, value: e.value });
+          }
+        }
+        return next.length ? next : [{ key: "", value: "" }];
+      });
+
+      setSubScores((prev) => {
+        const existingScores: Record<string, number> = {};
+        for (const e of prev) {
+          const L = e.label.trim();
+          if (L) existingScores[L] = e.value;
+        }
+        const newSubScores: SubScoreEntry[] = scoreLabels.map((name) => ({
+          label: String(name),
+          value: existingScores[name] ?? 0,
+        }));
+        const templateLabelSet = new Set(scoreLabels);
+        for (const e of prev) {
+          const L = e.label.trim();
+          if (L && !templateLabelSet.has(L)) {
+            newSubScores.push({ label: e.label, value: e.value });
+          }
+        }
+        return newSubScores;
+      });
+    },
+    []
+  );
+
+  const handleTemplateChange = useCallback(
+    (newTemplateId: string) => {
+      setTemplateId(newTemplateId);
+      const template = templates.find((t) => t.id === newTemplateId);
+      if (template) applyTemplateSchema(template);
+    },
+    [templates, applyTemplateSchema]
+  );
+
+  // On load: when product has template_id, merge template's score_schema (and spec_schema) so UI has all keys
+  useEffect(() => {
+    const template = templates.find((t) => t.id === templateId);
+    if (templateId && template) {
+      applyTemplateSchema(template);
+    }
+  }, [templateId, templates, applyTemplateSchema]);
 
   const addSpec = useCallback(() => {
     setSpecEntries((prev) => [...prev, { key: "", value: "" }]);
@@ -135,12 +254,12 @@ export function ProductForm({ product }: ProductFormProps) {
   }, []);
 
   const addSubScore = useCallback(() => {
-    setSubScores((prev) => [...prev, { key: "", value: 0 }]);
+    setSubScores((prev) => [...prev, { label: "", value: 0 }]);
   }, []);
 
-  const updateSubScoreKey = useCallback((index: number, key: string) => {
+  const updateSubScoreLabel = useCallback((index: number, label: string) => {
     setSubScores((prev) =>
-      prev.map((e, i) => (i === index ? { ...e, key } : e))
+      prev.map((e, i) => (i === index ? { ...e, label } : e))
     );
   }, []);
 
@@ -148,24 +267,52 @@ export function ProductForm({ product }: ProductFormProps) {
     setSubScores((prev) => (prev.length <= 1 ? prev : prev.filter((_, i) => i !== index)));
   }, []);
 
+  const addAffiliateLink = useCallback(() => {
+    if (affiliateLinks.length >= 5) return;
+    setAffiliateLinks((prev) => [...prev, { retailer: "", url: "" }]);
+  }, [affiliateLinks.length]);
+
+  const updateAffiliateLink = useCallback((index: number, field: keyof AffiliateLink, value: string) => {
+    setAffiliateLinks((prev) =>
+      prev.map((item, i) => (i === index ? { ...item, [field]: value } : item))
+    );
+  }, []);
+
+  const removeAffiliateLink = useCallback((index: number) => {
+    setAffiliateLinks((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
   const editorialData: EditorialData = {
+    bottom_line: bottomLine.trim() || undefined,
     pros: pros.filter((p) => p.trim()).length ? pros.map((p) => p.trim()).filter(Boolean) : undefined,
     cons: cons.filter((c) => c.trim()).length ? cons.map((c) => c.trim()).filter(Boolean) : undefined,
     sub_scores: (() => {
-      const rec: Record<string, number> = {};
-      for (const { key, value } of subScores) {
-        const k = key.trim();
-        if (k) rec[k] = value;
-      }
-      return Object.keys(rec).length ? rec : undefined;
+      const finalSubScores = subScores.reduce<Record<string, number>>((acc, curr) => {
+        const L = curr.label?.trim();
+        if (L) acc[L] = curr.value;
+        return acc;
+      }, {});
+      return Object.keys(finalSubScores).length ? finalSubScores : undefined;
     })(),
     final_score: finalScore || undefined,
   };
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (!templateId.trim()) {
+      setError("Please select a product blueprint to continue.");
+      return;
+    }
     setError("");
     setSaving(true);
+    const linksPayload: AffiliateLink[] = affiliateLinks
+      .map((item) => ({
+        retailer: item.retailer?.trim() ?? "",
+        url: item.url?.trim() ?? "",
+        price: item.price?.trim() || undefined,
+      }))
+      .filter((item) => item.retailer || item.url);
+
     const payload: Partial<Product> = {
       ...(product?.id ? { id: product.id } : {}),
       name: name.trim(),
@@ -174,8 +321,12 @@ export function ProductForm({ product }: ProductFormProps) {
       release_date: releaseDate.trim() || null,
       hero_image: heroImage?.trim() || null,
       transparent_image: transparentImage?.trim() || null,
+      template_id: templateId.trim() || null,
+      category_id: categoryId === "" ? null : categoryId,
+      seo_title: seoTitle.trim() || null,
+      seo_description: seoDescription.trim() || null,
       specs: entriesToSpecs(specEntries),
-      affiliate_links: product?.affiliate_links ?? {},
+      affiliate_links: linksPayload,
       editorial_data: editorialData,
     };
     const result = await upsertProduct(payload);
@@ -190,262 +341,419 @@ export function ProductForm({ product }: ProductFormProps) {
   const inputClass =
     "w-full rounded-md border border-white/20 bg-white/5 px-3 py-2 font-sans text-sm text-hot-white placeholder:text-gray-500 focus:border-hot-white/50 focus:outline-none focus:ring-1 focus:ring-hot-white/30";
   const labelClass = "block font-sans text-sm font-medium text-gray-400 mb-1";
+  const textareaClass = `${inputClass} min-h-[100px] resize-y`;
+
+  const hasTemplate = Boolean(templateId.trim());
+
+  console.log("Current SubScores State:", subScores);
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8 max-w-2xl">
+    <form onSubmit={handleSubmit} className="space-y-8">
       {error && (
-        <div className="rounded-md bg-red-500/10 border border-red-500/20 px-4 py-3 text-sm text-red-400">
+        <div className="rounded-md border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
           {error}
         </div>
       )}
 
-      <section className="space-y-4">
-        <h2 className="font-sans text-lg font-medium text-hot-white">
-          Basic info
-        </h2>
-        <div>
-          <label className={labelClass}>Name</label>
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className={inputClass}
-            placeholder="Product name"
-            required
-          />
-        </div>
-        <div>
-          <label className={labelClass}>Brand</label>
-          <input
-            type="text"
-            value={brand}
-            onChange={(e) => setBrand(e.target.value)}
-            className={inputClass}
-            placeholder="Brand"
-            required
-          />
-        </div>
-        <div>
-          <label className={labelClass}>Slug</label>
-          <input
-            type="text"
-            value={slug}
-            onChange={(e) => setSlug(e.target.value)}
-            className={inputClass}
-            placeholder="url-slug"
-            required
-          />
-        </div>
-        <div>
-          <label className={labelClass}>Release Date</label>
-          <input
-            type="date"
-            value={releaseDate}
-            onChange={(e) => setReleaseDate(e.target.value)}
-            className={inputClass}
-          />
-        </div>
-      </section>
-
-      <section className="space-y-4">
-        <h2 className="font-sans text-lg font-medium text-hot-white">
-          Media
-        </h2>
-        <UniversalImagePicker
-          label="Hero Image"
-          value={heroImage}
-          onChange={(url) => setHeroImage(url || null)}
-        />
-        <UniversalImagePicker
-          label="Transparent Image"
-          value={transparentImage}
-          onChange={(url) => setTransparentImage(url || null)}
-        />
-      </section>
-
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="font-sans text-lg font-medium text-hot-white">
-            Specs
-          </h2>
-          <button
-            type="button"
-            onClick={addSpec}
-            className="rounded-md border border-white/20 bg-white/5 px-3 py-1.5 font-sans text-sm text-gray-400 hover:bg-white/10 hover:text-hot-white"
-          >
-            Add Spec
-          </button>
-        </div>
-        <div className="space-y-2">
-          {specEntries.map((entry, i) => (
-            <div key={i} className="flex gap-2 items-center">
-              <input
-                type="text"
-                value={entry.key}
-                onChange={(e) => updateSpec(i, "key", e.target.value)}
-                className={`${inputClass} flex-1`}
-                placeholder="e.g. CPU"
-              />
-              <input
-                type="text"
-                value={entry.value}
-                onChange={(e) => updateSpec(i, "value", e.target.value)}
-                className={`${inputClass} flex-1`}
-                placeholder="e.g. Snapdragon 8 Gen 3"
-              />
-              <button
-                type="button"
-                onClick={() => removeSpec(i)}
-                className="shrink-0 rounded px-2 py-1.5 text-sm text-red-400 hover:bg-red-500/10"
-                aria-label="Remove spec"
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-12">
+        {/* Left column: Template (always), then Basic Info, SEO, Media when template selected */}
+        <div className="space-y-8 lg:col-span-5">
+          <section className="space-y-4">
+            <h2 className="font-sans text-lg font-medium text-hot-white">
+              Blueprint
+            </h2>
+            <div>
+              <label className={labelClass}>Product template (required)</label>
+              <select
+                value={templateId}
+                onChange={(e) => handleTemplateChange(e.target.value)}
+                className={inputClass}
+                aria-label="Product template"
+                required
               >
-                Remove
-              </button>
+                <option value="">Select a blueprint…</option>
+                {templates.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
             </div>
-          ))}
-        </div>
-      </section>
+          </section>
 
-      <section className="space-y-4">
-        <h2 className="font-sans text-lg font-medium text-hot-white">
-          Editorial data
-        </h2>
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className={labelClass}>Pros</label>
-            <button
-              type="button"
-              onClick={addPro}
-              className="rounded-md border border-white/20 bg-white/5 px-3 py-1.5 font-sans text-sm text-gray-400 hover:bg-white/10 hover:text-hot-white"
-            >
-              Add Pro
-            </button>
-          </div>
-          <div className="space-y-2">
-            {pros.map((p, i) => (
-              <div key={i} className="flex gap-2">
-                <input
-                  type="text"
-                  value={p}
-                  onChange={(e) => updatePro(i, e.target.value)}
-                  className={inputClass}
-                  placeholder="Pro item"
+          {!hasTemplate ? (
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 px-4 py-6 text-center">
+              <p className="font-sans text-sm text-amber-200">
+                Please select a product blueprint to continue.
+              </p>
+            </div>
+          ) : (
+            <>
+              <section className="space-y-4">
+                <h2 className="font-sans text-lg font-medium text-hot-white">
+                  Basic info
+                </h2>
+                <div>
+                  <label className={labelClass}>Name</label>
+                  <input
+                    type="text"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    className={inputClass}
+                    placeholder="Product name"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Brand</label>
+                  <input
+                    type="text"
+                    value={brand}
+                    onChange={(e) => setBrand(e.target.value)}
+                    className={inputClass}
+                    placeholder="Brand"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Slug</label>
+                  <input
+                    type="text"
+                    value={slug}
+                    onChange={(e) => setSlug(e.target.value)}
+                    className={inputClass}
+                    placeholder="url-slug"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Release Date</label>
+                  <input
+                    type="date"
+                    value={releaseDate}
+                    onChange={(e) => setReleaseDate(e.target.value)}
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Category</label>
+                  <select
+                    value={categoryId === "" ? "" : String(categoryId)}
+                    onChange={(e) => setCategoryId(e.target.value === "" ? "" : Number(e.target.value))}
+                    className={inputClass}
+                    aria-label="Product category"
+                  >
+                    <option value="">None</option>
+                    {categoryOptions.map((opt) => (
+                      <option key={opt.id} value={opt.id}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </section>
+
+              <section className="space-y-4">
+                <h2 className="font-sans text-lg font-medium text-hot-white">
+                  SEO metadata
+                </h2>
+                <div>
+                  <label className={labelClass}>SEO Title</label>
+                  <input
+                    type="text"
+                    value={seoTitle}
+                    onChange={(e) => setSeoTitle(e.target.value)}
+                    className={inputClass}
+                    placeholder="Optional meta title"
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>SEO Description</label>
+                  <input
+                    type="text"
+                    value={seoDescription}
+                    onChange={(e) => setSeoDescription(e.target.value)}
+                    className={inputClass}
+                    placeholder="Optional meta description"
+                  />
+                </div>
+              </section>
+
+              <section className="space-y-4">
+                <h2 className="font-sans text-lg font-medium text-hot-white">
+                  Media
+                </h2>
+                <UniversalImagePicker
+                  label="Hero Image"
+                  value={heroImage}
+                  onChange={(url) => setHeroImage(url || null)}
                 />
+                <UniversalImagePicker
+                  label="Transparent Image"
+                  value={transparentImage}
+                  onChange={(url) => setTransparentImage(url || null)}
+                />
+              </section>
+            </>
+          )}
+        </div>
+
+        {/* Right column: Specs, Editorial Data, Rating (only when template selected) */}
+        {hasTemplate && (
+          <div className="space-y-8 lg:col-span-7">
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="font-sans text-lg font-medium text-hot-white">
+                  Specs
+                </h2>
                 <button
                   type="button"
-                  onClick={() => removePro(i)}
-                  className="shrink-0 rounded px-2 py-1.5 text-sm text-red-400 hover:bg-red-500/10"
-                  aria-label="Remove pro"
+                  onClick={addSpec}
+                  className="rounded-md border border-white/20 bg-white/5 px-3 py-1.5 font-sans text-sm text-gray-400 hover:bg-white/10 hover:text-hot-white"
                 >
-                  Remove
+                  Add Spec
                 </button>
               </div>
-            ))}
-          </div>
-        </div>
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className={labelClass}>Cons</label>
-            <button
-              type="button"
-              onClick={addCon}
-              className="rounded-md border border-white/20 bg-white/5 px-3 py-1.5 font-sans text-sm text-gray-400 hover:bg-white/10 hover:text-hot-white"
-            >
-              Add Con
-            </button>
-          </div>
-          <div className="space-y-2">
-            {cons.map((c, i) => (
-              <div key={i} className="flex gap-2">
-                <input
-                  type="text"
-                  value={c}
-                  onChange={(e) => updateCon(i, e.target.value)}
-                  className={inputClass}
-                  placeholder="Con item"
+              <div className="space-y-2">
+                {specEntries.map((entry, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={entry.key}
+                      onChange={(e) => updateSpec(i, "key", e.target.value)}
+                      className={`${inputClass} flex-1`}
+                      placeholder="e.g. CPU"
+                    />
+                    <input
+                      type="text"
+                      value={entry.value}
+                      onChange={(e) => updateSpec(i, "value", e.target.value)}
+                      className={`${inputClass} flex-1`}
+                      placeholder="e.g. Snapdragon 8 Gen 3"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeSpec(i)}
+                      className="shrink-0 rounded px-2 py-1.5 text-sm text-red-400 hover:bg-red-500/10"
+                      aria-label="Remove spec"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="font-sans text-lg font-medium text-hot-white">
+                  Where to Buy
+                </h2>
+                {affiliateLinks.length < 5 && (
+                  <button
+                    type="button"
+                    onClick={addAffiliateLink}
+                    className="rounded-md border border-white/20 bg-white/5 px-3 py-1.5 font-sans text-sm text-gray-400 hover:bg-white/10 hover:text-hot-white"
+                  >
+                    Add Link
+                  </button>
+                )}
+              </div>
+              <p className="text-sm text-gray-500">
+                Up to 5 retailer links (e.g. Amazon, store URL).
+              </p>
+              <div className="space-y-2">
+                {affiliateLinks.map((link, i) => (
+                  <div key={i} className="flex w-full min-w-0 items-center gap-2">
+                    <input
+                      type="text"
+                      value={link.retailer ?? ""}
+                      onChange={(e) => updateAffiliateLink(i, "retailer", e.target.value)}
+                      className={`${inputClass} min-w-0 flex-1`}
+                      placeholder="Retailer (e.g. Amazon)"
+                    />
+                    <input
+                      type="url"
+                      value={link.url ?? ""}
+                      onChange={(e) => updateAffiliateLink(i, "url", e.target.value)}
+                      className={`${inputClass} min-w-0 flex-1`}
+                      placeholder="URL"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeAffiliateLink(i)}
+                      className="shrink-0 rounded border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-red-400 hover:bg-red-500/10"
+                      aria-label="Remove link"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="space-y-4">
+              <h2 className="font-sans text-lg font-medium text-hot-white">
+                Editorial data
+              </h2>
+              <div>
+                <label className={labelClass}>Product Bottom Line</label>
+                <textarea
+                  value={bottomLine}
+                  onChange={(e) => setBottomLine(e.target.value)}
+                  className={textareaClass}
+                  placeholder="Short summary or verdict…"
+                  rows={3}
                 />
+              </div>
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <label className={labelClass}>Pros</label>
+                  <button
+                    type="button"
+                    onClick={addPro}
+                    className="rounded-md border border-white/20 bg-white/5 px-3 py-1.5 font-sans text-sm text-gray-400 hover:bg-white/10 hover:text-hot-white"
+                  >
+                    Add Pro
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {pros.map((p, i) => (
+                    <div key={i} className="flex gap-2">
+                      <input
+                        type="text"
+                        value={p}
+                        onChange={(e) => updatePro(i, e.target.value)}
+                        className={inputClass}
+                        placeholder="Pro item"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removePro(i)}
+                        className="shrink-0 rounded px-2 py-1.5 text-sm text-red-400 hover:bg-red-500/10"
+                        aria-label="Remove pro"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <label className={labelClass}>Cons</label>
+                  <button
+                    type="button"
+                    onClick={addCon}
+                    className="rounded-md border border-white/20 bg-white/5 px-3 py-1.5 font-sans text-sm text-gray-400 hover:bg-white/10 hover:text-hot-white"
+                  >
+                    Add Con
+                  </button>
+                </div>
+                <div className="space-y-2">
+                  {cons.map((c, i) => (
+                    <div key={i} className="flex gap-2">
+                      <input
+                        type="text"
+                        value={c}
+                        onChange={(e) => updateCon(i, e.target.value)}
+                        className={inputClass}
+                        placeholder="Con item"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => removeCon(i)}
+                        className="shrink-0 rounded px-2 py-1.5 text-sm text-red-400 hover:bg-red-500/10"
+                        aria-label="Remove con"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            <section className="space-y-4">
+              <h2 className="font-sans text-lg font-medium text-hot-white">
+                Rating
+              </h2>
+              <p className="text-sm text-gray-500">
+                Sub-scores from the template plus any custom scores.
+              </p>
+              <div className="space-y-2 w-full">
+                {subScores.map((item, i) => (
+                  <div key={i} className="flex w-full items-center gap-2">
+                    <input
+                      type="text"
+                      value={item.label ?? ""}
+                      onChange={(e) => updateSubScoreLabel(i, e.target.value)}
+                      className={`${inputClass} min-w-[10rem] flex-1`}
+                      placeholder="e.g. Performance"
+                      aria-label="Sub-score label"
+                    />
+                    <input
+                      type="number"
+                      min={0}
+                      max={10}
+                      step={0.1}
+                      value={item.value}
+                      onChange={(e) => updateSubScore(i, Number(e.target.value))}
+                      className={`${inputClass} !w-20 shrink-0 text-center`}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeSubScore(i)}
+                      className="shrink-0 rounded border border-white/10 bg-white/5 px-3 py-2 text-sm text-red-400 hover:bg-red-500/10"
+                      aria-label="Remove sub-score"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
                 <button
                   type="button"
-                  onClick={() => removeCon(i)}
-                  className="shrink-0 rounded px-2 py-1.5 text-sm text-red-400 hover:bg-red-500/10"
-                  aria-label="Remove con"
+                  onClick={addSubScore}
+                  className="rounded-md border border-dashed border-white/20 px-3 py-1.5 font-sans text-sm text-gray-400 hover:border-white/40 hover:text-hot-white"
                 >
-                  Remove
+                  Add sub-score
                 </button>
               </div>
-            ))}
-          </div>
-        </div>
-        <div>
-          <label className={labelClass}>Sub-scores (e.g. Performance, Value)</label>
-          <div className="space-y-2">
-            {subScores.map((entry, i) => (
-              <div key={i} className="flex gap-2 items-center">
-                <input
-                  type="text"
-                  value={entry.key}
-                  onChange={(e) => updateSubScoreKey(i, e.target.value)}
-                  className={`${inputClass} flex-1`}
-                  placeholder="Label"
-                />
+              <div>
+                <label className={labelClass}>Final score</label>
                 <input
                   type="number"
                   min={0}
                   max={10}
                   step={0.1}
-                  value={entry.value}
-                  onChange={(e) => updateSubScore(i, Number(e.target.value))}
+                  value={finalScore}
+                  onChange={(e) => setFinalScore(Number(e.target.value))}
                   className={`${inputClass} w-24`}
                 />
-                <button
-                  type="button"
-                  onClick={() => removeSubScore(i)}
-                  className="shrink-0 rounded px-2 py-1.5 text-sm text-red-400 hover:bg-red-500/10"
-                  aria-label="Remove sub-score"
-                >
-                  Remove
-                </button>
               </div>
-            ))}
-            <button
-              type="button"
-              onClick={addSubScore}
-              className="rounded-md border border-dashed border-white/20 px-3 py-1.5 font-sans text-sm text-gray-400 hover:border-white/40 hover:text-hot-white"
-            >
-              Add sub-score
-            </button>
+            </section>
           </div>
-        </div>
-        <div>
-          <label className={labelClass}>Final score</label>
-          <input
-            type="number"
-            min={0}
-            max={10}
-            step={0.1}
-            value={finalScore}
-            onChange={(e) => setFinalScore(Number(e.target.value))}
-            className={`${inputClass} w-24`}
-          />
-        </div>
-      </section>
-
-      <div className="flex gap-3 pt-4">
-        <button
-          type="submit"
-          disabled={saving}
-          className="rounded-md bg-hot-white px-4 py-2 font-sans text-sm font-medium text-hot-black transition-colors hover:bg-hot-white/90 disabled:opacity-50"
-        >
-          {saving ? "Saving…" : product ? "Update Product" : "Create Product"}
-        </button>
-        <button
-          type="button"
-          onClick={() => router.push("/admin/products")}
-          className="rounded-md border border-white/20 px-4 py-2 font-sans text-sm text-gray-400 hover:bg-white/5 hover:text-hot-white"
-        >
-          Cancel
-        </button>
+        )}
       </div>
+
+      {hasTemplate && (
+        <div className="flex gap-3 pt-4">
+          <button
+            type="submit"
+            disabled={saving}
+            className="rounded-md bg-hot-white px-4 py-2 font-sans text-sm font-medium text-hot-black transition-colors hover:bg-hot-white/90 disabled:opacity-50"
+          >
+            {saving ? "Saving…" : product ? "Update Product" : "Create Product"}
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push("/admin/products")}
+            className="rounded-md border border-white/20 px-4 py-2 font-sans text-sm text-gray-400 hover:bg-white/5 hover:text-hot-white"
+          >
+            Cancel
+          </button>
+        </div>
+      )}
     </form>
   );
 }
