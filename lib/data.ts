@@ -460,6 +460,71 @@ export type SupabasePost = {
   user_id?: string | null;
 };
 
+/** Published post by primary_product_id and post_type (e.g. 'reviews'). Direct columns, no junction join. */
+export async function getPostByPrimaryProductAndType(
+  primaryProductId: string,
+  postType: string
+): Promise<SupabasePost | null> {
+  const { data, error } = await supabase
+    .from("posts")
+    .select("id, title, slug, excerpt, content, main_image, status, created_at, updated_at, published_at, source_name, showcase_data, display_options, user_id")
+    .eq("primary_product_id", primaryProductId)
+    .eq("post_type", postType)
+    .eq("status", "published")
+    .maybeSingle();
+
+  if (error) {
+    console.error("[getPostByPrimaryProductAndType]", error);
+    return null;
+  }
+  if (!data) return null;
+
+  let content_type_slug: string | null = null;
+  const { data: pct } = await supabase
+    .from("post_content_types")
+    .select("content_type_id")
+    .eq("post_id", data.id)
+    .maybeSingle();
+  if (pct?.content_type_id != null) {
+    const { data: ct } = await supabase
+      .from("content_types")
+      .select("slug")
+      .eq("id", pct.content_type_id)
+      .maybeSingle();
+    content_type_slug = ct?.slug ?? null;
+  }
+
+  const showcaseData = data.showcase_data;
+  const displayOptions = data.display_options;
+  return {
+    ...data,
+    body: data.content != null ? String(data.content) : null,
+    featured_image: data.main_image != null ? String(data.main_image) : null,
+    content_type_slug,
+    showcase_data: Array.isArray(showcaseData) ? showcaseData : [],
+    display_options: displayOptions != null && typeof displayOptions === "object" && !Array.isArray(displayOptions) ? (displayOptions as Record<string, unknown>) : {},
+    user_id: data.user_id != null ? String(data.user_id) : null,
+  } as SupabasePost;
+}
+
+export type LatestPostItem = { id: string; title: string | null; slug: string | null; excerpt: string | null; published_at: string | null };
+
+/** Latest published posts for category hub "latest news". Direct query, no joins. */
+export async function getLatestPublishedPosts(limit: number = 10): Promise<LatestPostItem[]> {
+  const { data, error } = await supabase
+    .from("posts")
+    .select("id, title, slug, excerpt, published_at")
+    .eq("status", "published")
+    .order("published_at", { ascending: false })
+    .limit(Math.max(1, limit));
+
+  if (error) {
+    console.error("[getLatestPublishedPosts]", error);
+    return [];
+  }
+  return (data ?? []) as LatestPostItem[];
+}
+
 export async function getPostBySlug(slug: string): Promise<SupabasePost | null> {
   const { data, error } = await supabase
     .from("posts")

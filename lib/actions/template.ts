@@ -34,6 +34,23 @@ export async function getTemplateById(id: string): Promise<ProductTemplate | nul
   return data as ProductTemplate | null;
 }
 
+/** Look up a product template by slug (e.g. "phones", "laptops"). Ensure product_templates has a row with the desired slug. */
+export async function getTemplateBySlug(slug: string): Promise<ProductTemplate | null> {
+  if (!slug?.trim()) return null;
+  const client = await createClient();
+  const { data, error } = await client
+    .from("product_templates")
+    .select("*")
+    .eq("slug", slug.trim())
+    .maybeSingle();
+
+  if (error) {
+    console.error("[getTemplateBySlug]", error);
+    return null;
+  }
+  return data as ProductTemplate | null;
+}
+
 export async function upsertTemplate(
   data: Partial<ProductTemplate>
 ): Promise<{ template?: ProductTemplate; error?: string }> {

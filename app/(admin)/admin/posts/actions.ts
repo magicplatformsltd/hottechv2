@@ -69,6 +69,10 @@ export type PostRow = {
   display_options: Record<string, unknown>;
   /** Primary category for SEO and display when post has multiple categories. */
   primary_category_id: number | null;
+  /** Editorial type slug for routing (e.g. reviews, news); synced from content type. */
+  post_type?: string | null;
+  /** Primary product UUID; synced from post_products where is_primary = true. */
+  primary_product_id?: string | null;
   /** First N category names for list display (from post_categories join). */
   category_names?: string[];
   /** First N tag names for list display (from post_tags join). */
@@ -150,7 +154,7 @@ export async function getPostById(id: string): Promise<PostRow | null> {
   const client = await createClient();
   const { data, error } = await client
     .from("posts")
-    .select("id, title, slug, excerpt, content, main_image, status, created_at, updated_at, published_at, source_name, original_url, meta_title, meta_description, canonical_url, showcase_data, display_options, draft_title, draft_summary, draft_content, draft_hero_image, primary_category_id")
+    .select("id, title, slug, excerpt, content, main_image, status, created_at, updated_at, published_at, source_name, original_url, meta_title, meta_description, canonical_url, showcase_data, display_options, draft_title, draft_summary, draft_content, draft_hero_image, primary_category_id, post_type, primary_product_id")
     .eq("id", id)
     .maybeSingle();
 
@@ -221,17 +225,31 @@ export type PostTaxonomies = {
 
 export async function getPostTaxonomies(postId: string): Promise<PostTaxonomies> {
   const client = await createClient();
-  const [pc, pt, pct] = await Promise.all([
+  const [pc, pt, postRow, pct] = await Promise.all([
     client.from("post_categories").select("category_id").eq("post_id", postId),
     client.from("post_tags").select("tag_id").eq("post_id", postId),
+    client.from("posts").select("post_type").eq("id", postId).maybeSingle(),
     client.from("post_content_types").select("content_type_id").eq("post_id", postId).maybeSingle(),
   ]);
   const categoryIds = (pc.data ?? []).map((r: { category_id: number }) => r.category_id);
   const tagIds = (pt.data ?? []).map((r: { tag_id: number }) => r.tag_id);
-  const contentTypeId =
-    pct.data != null && typeof (pct.data as { content_type_id: number }).content_type_id === "number"
-      ? (pct.data as { content_type_id: number }).content_type_id
-      : null;
+
+  let contentTypeId: number | null = null;
+  const postType = (postRow.data as { post_type?: string } | null)?.post_type;
+  if (postType != null && String(postType).trim() !== "") {
+    const { data: ct } = await client
+      .from("content_types")
+      .select("id")
+      .eq("slug", String(postType).trim())
+      .maybeSingle();
+    if (ct != null && typeof (ct as { id: number }).id === "number") {
+      contentTypeId = (ct as { id: number }).id;
+    }
+  }
+  if (contentTypeId == null && pct.data != null && typeof (pct.data as { content_type_id: number }).content_type_id === "number") {
+    contentTypeId = (pct.data as { content_type_id: number }).content_type_id;
+  }
+
   return { categoryIds, tagIds, contentTypeId };
 }
 
@@ -292,6 +310,16 @@ export async function createPost(formData: FormData): Promise<{ id?: string; err
   const now = new Date().toISOString();
   const publishedAt = published_at ? new Date(published_at).toISOString() : now;
 
+  let postTypeSlug: string | null = null;
+  if (contentTypeIdValid != null) {
+    const { data: ct } = await supabaseServer
+      .from("content_types")
+      .select("slug")
+      .eq("id", contentTypeIdValid)
+      .maybeSingle();
+    postTypeSlug = (ct as { slug?: string } | null)?.slug ?? null;
+  }
+
   const { data, error } = await supabaseServer
     .from("posts")
     .insert({
@@ -312,6 +340,7 @@ export async function createPost(formData: FormData): Promise<{ id?: string; err
       showcase_data: showcaseData,
       display_options: displayOptions,
       primary_category_id: primaryCategoryIdValid,
+      post_type: postTypeSlug,
       user_id: user.id,
     })
     .select("id")
@@ -398,6 +427,18 @@ export async function updatePost(
     }
   }
 
+  let postTypeSlug: string | null = null;
+  if (contentTypeIdValid != null) {
+    const { data: ct } = await supabaseServer
+      .from("content_types")
+      .select("slug")
+      .eq("id", contentTypeIdValid)
+      .maybeSingle();
+    postTypeSlug = (ct as { slug?: string } | null)?.slug ?? null;
+  } else {
+    postTypeSlug = null;
+  }
+
   const payload: Record<string, unknown> = {
     updated_at: new Date().toISOString(),
     draft_title: title ?? null,
@@ -413,6 +454,7 @@ export async function updatePost(
     showcase_data: showcaseData,
     display_options: displayOptions,
     primary_category_id: primaryCategoryIdValid,
+    post_type: postTypeSlug,
   };
   if (published_at) {
     try {

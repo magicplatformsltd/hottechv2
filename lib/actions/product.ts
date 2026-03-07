@@ -58,6 +58,38 @@ export async function getProductById(id: string): Promise<Product | null> {
   return data as Product | null;
 }
 
+export async function getProductBySlug(slug: string): Promise<Product | null> {
+  if (!slug?.trim()) return null;
+  const client = await createClient();
+  const { data, error } = await client
+    .from("products")
+    .select("*")
+    .eq("slug", slug.trim())
+    .maybeSingle();
+
+  if (error) {
+    console.error("[getProductBySlug]", error);
+    return null;
+  }
+  return data as Product | null;
+}
+
+export async function getProductsByTemplateId(templateId: string): Promise<Product[]> {
+  if (!templateId?.trim()) return [];
+  const client = await createClient();
+  const { data, error } = await client
+    .from("products")
+    .select("*")
+    .eq("template_id", templateId.trim())
+    .order("name", { ascending: true });
+
+  if (error) {
+    console.error("[getProductsByTemplateId]", error);
+    return [];
+  }
+  return (data ?? []) as Product[];
+}
+
 export async function upsertProduct(
   data: Partial<Product>
 ): Promise<{ product?: Product; error?: string }> {
@@ -232,6 +264,10 @@ export async function linkProductToPost(
     console.error("[linkProductToPost]", error);
     return { error: error.message };
   }
+
+  if (isFirst) {
+    await client.from("posts").update({ primary_product_id: productId.trim() }).eq("id", postId.trim());
+  }
   revalidatePath(`${EDITOR_PATH}/${postId}`);
   revalidatePath("/");
   return {};
@@ -250,6 +286,14 @@ export async function unlinkProduct(
   } = await client.auth.getUser();
   if (!user) return { error: "Unauthorized." };
 
+  const { data: linkRow } = await client
+    .from("post_products")
+    .select("is_primary")
+    .eq("post_id", postId.trim())
+    .eq("product_id", productId.trim())
+    .maybeSingle();
+  const wasPrimary = linkRow != null && (linkRow as { is_primary?: boolean }).is_primary === true;
+
   const { error } = await client
     .from("post_products")
     .delete()
@@ -259,6 +303,17 @@ export async function unlinkProduct(
   if (error) {
     console.error("[unlinkProduct]", error);
     return { error: error.message };
+  }
+
+  if (wasPrimary) {
+    const { data: next } = await client
+      .from("post_products")
+      .select("product_id")
+      .eq("post_id", postId.trim())
+      .eq("is_primary", true)
+      .maybeSingle();
+    const nextId = (next as { product_id?: string } | null)?.product_id ?? null;
+    await client.from("posts").update({ primary_product_id: nextId }).eq("id", postId.trim());
   }
   revalidatePath(`${EDITOR_PATH}/${postId}`);
   revalidatePath("/");
@@ -298,6 +353,8 @@ export async function setPrimaryProduct(
     console.error("[setPrimaryProduct] set", onError);
     return { error: onError.message };
   }
+
+  await client.from("posts").update({ primary_product_id: productId.trim() }).eq("id", postId.trim());
   revalidatePath(`${EDITOR_PATH}/${postId}`);
   revalidatePath("/");
   return {};
