@@ -4,6 +4,14 @@ import { ProductBoxNodeView } from "@/components/editor/nodes/ProductBoxNodeView
 
 export type ProductBoxImageType = "transparent" | "hero";
 
+export type AffiliatePriceOverride = {
+  price_amount?: string;
+  price_currency?: string;
+  cta_text?: string;
+  show_price?: boolean;
+  show_retailer?: boolean;
+};
+
 export type ProductBoxConfig = {
   showStarRating?: boolean;
   showProsCons?: boolean;
@@ -11,6 +19,8 @@ export type ProductBoxConfig = {
   keySpecKeys?: string[];
   includeAffiliateButtons?: boolean;
   selectedAffiliates?: string[];
+  /** Post-specific price/currency per retailer (key = retailer name). */
+  affiliatePriceOverrides?: Record<string, AffiliatePriceOverride>;
   showImage?: boolean;
   imageType?: ProductBoxImageType;
   descriptionOverride?: string;
@@ -25,6 +35,7 @@ export const DEFAULT_PRODUCT_BOX_CONFIG: ProductBoxConfig = {
   keySpecKeys: [],
   includeAffiliateButtons: true,
   selectedAffiliates: [],
+  affiliatePriceOverrides: {},
   showImage: true,
   imageType: "transparent",
   descriptionOverride: "",
@@ -53,6 +64,10 @@ function parseConfig(raw: string | undefined): ProductBoxConfig {
           : "transparent",
       descriptionOverride: typeof parsed.descriptionOverride === "string" ? parsed.descriptionOverride : "",
       showAward: typeof parsed.showAward === "boolean" ? parsed.showAward : true,
+      affiliatePriceOverrides:
+        parsed.affiliatePriceOverrides && typeof parsed.affiliatePriceOverrides === "object"
+          ? parsed.affiliatePriceOverrides
+          : {},
     };
   } catch {
     return { ...DEFAULT_PRODUCT_BOX_CONFIG };

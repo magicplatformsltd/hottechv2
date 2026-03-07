@@ -14,7 +14,7 @@ import { ImageGalleryBlock } from "@/components/posts/ImageGalleryBlock";
 import { ImageComparisonBlock } from "@/components/posts/ImageComparisonBlock";
 import { PullQuoteBlock } from "@/components/posts/PullQuoteBlock";
 import { KeyTakeawaysBlock } from "@/components/posts/KeyTakeawaysBlock";
-import { ProductCard } from "@/components/public/ProductCard";
+import { ProductReviewCard } from "@/components/public/ProductReviewCard";
 
 export type RenderedBlock =
   | { type: "html"; content: string }
@@ -76,7 +76,7 @@ export function BlockRenderer({
             content = <KeyTakeawaysBlock key={i} data={block.data} />;
             break;
           case "productBox":
-            content = <ProductCard key={i} data={block.data} className="my-4" />;
+            content = <ProductReviewCard key={i} data={block.data} className="my-6" />;
             break;
           case "html":
           default:

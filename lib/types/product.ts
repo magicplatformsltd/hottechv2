@@ -24,6 +24,10 @@ export type AffiliateLink = {
   retailer: string;
   url: string;
   price?: string;
+  /** Numeric price for display (e.g. "49.99"). */
+  price_amount?: string;
+  /** Currency code (GBP, USD, EUR, etc.). */
+  price_currency?: string;
 };
 
 /** Affiliate links: array form (preferred) or legacy key-value. */

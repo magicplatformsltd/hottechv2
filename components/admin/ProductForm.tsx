@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { upsertProduct } from "@/lib/actions/product";
 import type { Product, ProductSpecs, EditorialData, ProductTemplate, AffiliateLink } from "@/lib/types/product";
+import { CURRENCY_OPTIONS, DEFAULT_CURRENCY_CODE } from "@/lib/constants/currencies";
 import type { ProductAwardRecord } from "@/lib/types/award";
 import type { CategoryRow } from "@/lib/actions/categories";
 import { UniversalImagePicker } from "@/app/components/admin/shared/UniversalImagePicker";
@@ -44,11 +45,16 @@ function buildCategoryTreeOptions(categories: CategoryRow[]): CategoryOption[] {
 
 function normalizeAffiliateLinks(links: Product["affiliate_links"]): AffiliateLink[] {
   if (Array.isArray(links)) {
-    return links.map((item) => ({
-      retailer: typeof item.retailer === "string" ? item.retailer : "",
-      url: typeof item.url === "string" ? item.url : "",
-      price: typeof (item as AffiliateLink).price === "string" ? (item as AffiliateLink).price : undefined,
-    }));
+    return links.map((item) => {
+      const a = item as AffiliateLink;
+      return {
+        retailer: typeof a.retailer === "string" ? a.retailer : "",
+        url: typeof a.url === "string" ? a.url : "",
+        price: typeof a.price === "string" ? a.price : undefined,
+        price_amount: typeof a.price_amount === "string" ? a.price_amount : undefined,
+        price_currency: typeof a.price_currency === "string" ? a.price_currency : undefined,
+      };
+    });
   }
   if (links && typeof links === "object" && !Array.isArray(links)) {
     return Object.entries(links).map(([retailer, url]) => ({
@@ -302,7 +308,7 @@ export function ProductForm({ product, templates = [], categories = [], awards =
 
   const addAffiliateLink = useCallback(() => {
     if (affiliateLinks.length >= 5) return;
-    setAffiliateLinks((prev) => [...prev, { retailer: "", url: "" }]);
+    setAffiliateLinks((prev) => [...prev, { retailer: "", url: "", price_amount: "", price_currency: DEFAULT_CURRENCY_CODE }]);
   }, [affiliateLinks.length]);
 
   const updateAffiliateLink = useCallback((index: number, field: keyof AffiliateLink, value: string) => {
@@ -343,6 +349,8 @@ export function ProductForm({ product, templates = [], categories = [], awards =
         retailer: item.retailer?.trim() ?? "",
         url: item.url?.trim() ?? "",
         price: item.price?.trim() || undefined,
+        price_amount: item.price_amount?.trim() || undefined,
+        price_currency: item.price_currency?.trim() || undefined,
       }))
       .filter((item) => item.retailer || item.url);
 
@@ -688,9 +696,9 @@ export function ProductForm({ product, templates = [], categories = [], awards =
               <p className="text-sm text-gray-500">
                 Up to 5 retailer links (e.g. Amazon, store URL).
               </p>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {affiliateLinks.map((link, i) => (
-                  <div key={i} className="flex w-full min-w-0 items-center gap-2">
+                  <div key={i} className="flex flex-col gap-2 rounded border border-white/10 bg-white/5 p-2 sm:flex-row sm:flex-wrap sm:items-center">
                     <input
                       type="text"
                       value={link.retailer ?? ""}
@@ -705,6 +713,28 @@ export function ProductForm({ product, templates = [], categories = [], awards =
                       className={`${inputClass} min-w-0 flex-1`}
                       placeholder="URL"
                     />
+                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                      <input
+                        type="text"
+                        value={link.price_amount ?? ""}
+                        onChange={(e) => updateAffiliateLink(i, "price_amount", e.target.value)}
+                        className={`${inputClass} min-w-0 flex-1`}
+                        placeholder="Price (e.g. 49.99)"
+                      />
+                      <select
+                        value={link.price_currency ?? ""}
+                        onChange={(e) => updateAffiliateLink(i, "price_currency", e.target.value)}
+                        className={inputClass}
+                        title="Currency"
+                      >
+                        <option value="">Currency</option>
+                        {CURRENCY_OPTIONS.map((opt) => (
+                          <option key={opt.code} value={opt.code}>
+                            {opt.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                     <button
                       type="button"
                       onClick={() => removeAffiliateLink(i)}

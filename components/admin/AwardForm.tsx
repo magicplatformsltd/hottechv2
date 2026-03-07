@@ -662,8 +662,8 @@ export function AwardForm({ award }: AwardFormProps) {
                     <input
                       type="range"
                       min={0}
-                      max={10}
-                      step={1}
+                      max={48}
+                      step={4}
                       value={
                         typeof styleSettings.label_font_size === "number"
                           ? styleSettings.label_font_size
@@ -678,11 +678,11 @@ export function AwardForm({ award }: AwardFormProps) {
                       className="w-full accent-hot-white"
                     />
                     <p className="mt-1 text-xs text-gray-500">
+                      0 = Auto-fit, 4-48 = Exact pixel size
                       {typeof styleSettings.label_font_size === "number" &&
-                      styleSettings.label_font_size > 0
-                        ? styleSettings.label_font_size
-                        : "Auto"}{" "}
-                      — 0 = auto scale by length
+                      styleSettings.label_font_size > 0 && (
+                        <> — {styleSettings.label_font_size}px</>
+                      )}
                     </p>
                   </div>
                   <button

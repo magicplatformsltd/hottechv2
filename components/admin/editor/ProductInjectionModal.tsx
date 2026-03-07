@@ -11,6 +11,7 @@ import type { Product } from "@/lib/types/product";
 import type { ProductBoxConfig, ProductBoxImageType } from "./extensions/ProductBox";
 import { DEFAULT_PRODUCT_BOX_CONFIG } from "./extensions/ProductBox";
 import { ProductForm } from "@/components/admin/ProductForm";
+import { CURRENCY_OPTIONS } from "@/lib/constants/currencies";
 
 const SEARCH_DEBOUNCE_MS = 300;
 
@@ -442,19 +443,121 @@ export function ProductInjectionModal({
                   <span className="font-sans text-sm text-hot-white">Include Affiliate &quot;Buy&quot; Buttons</span>
                 </label>
                 {(config.includeAffiliateButtons ?? true) && affiliateKeys.length > 0 && (
-                  <div className="ml-6 space-y-1.5">
-                    <p className="text-xs text-gray-500">Uncheck to hide:</p>
-                    {affiliateKeys.map((key) => (
-                      <label key={key} className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={(config.selectedAffiliates ?? []).includes(key)}
-                          onChange={() => toggleAffiliate(key)}
-                          className="rounded border-white/20"
-                        />
-                        <span className="font-sans text-sm text-gray-300">{key}</span>
-                      </label>
-                    ))}
+                  <div className="ml-6 space-y-2">
+                    <p className="text-xs text-gray-500">Uncheck to hide. Optional: price, currency, CTA text, and visibility.</p>
+                    {affiliateKeys.map((key) => {
+                      const selected = (config.selectedAffiliates ?? []).includes(key);
+                      const overrides = config.affiliatePriceOverrides ?? {};
+                      const row = overrides[key] ?? {};
+                      const showPrice = row.show_price !== false;
+                      const showRetailer = row.show_retailer !== false;
+                      return (
+                        <div key={key} className="rounded border border-white/10 bg-white/5 p-2 space-y-2">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={() => toggleAffiliate(key)}
+                              className="rounded border-white/20"
+                            />
+                            <span className="font-sans text-sm text-gray-300">{key}</span>
+                          </label>
+                          {selected && (
+                            <div className="pl-6 space-y-2">
+                              <input
+                                type="text"
+                                value={row.cta_text ?? ""}
+                                onChange={(e) =>
+                                  setConfig((c) => ({
+                                    ...c,
+                                    affiliatePriceOverrides: {
+                                      ...(c.affiliatePriceOverrides ?? {}),
+                                      [key]: { ...(c.affiliatePriceOverrides?.[key] ?? {}), cta_text: e.target.value },
+                                    },
+                                  }))
+                                }
+                                placeholder="CTA text (e.g. Buy now)"
+                                className="w-full rounded border border-white/20 bg-white/5 px-2 py-1.5 text-sm text-hot-white placeholder:text-gray-500"
+                              />
+                              <div className="flex flex-wrap items-center gap-2">
+                                <input
+                                  type="text"
+                                  value={row.price_amount ?? ""}
+                                  onChange={(e) =>
+                                    setConfig((c) => ({
+                                      ...c,
+                                      affiliatePriceOverrides: {
+                                        ...(c.affiliatePriceOverrides ?? {}),
+                                        [key]: { ...(c.affiliatePriceOverrides?.[key] ?? {}), price_amount: e.target.value },
+                                      },
+                                    }))
+                                  }
+                                  placeholder="Price (e.g. 49.99)"
+                                  className="flex-1 min-w-[80px] rounded border border-white/20 bg-white/5 px-2 py-1.5 text-sm text-hot-white placeholder:text-gray-500"
+                                />
+                                <select
+                                  value={row.price_currency ?? ""}
+                                  onChange={(e) =>
+                                    setConfig((c) => ({
+                                      ...c,
+                                      affiliatePriceOverrides: {
+                                        ...(c.affiliatePriceOverrides ?? {}),
+                                        [key]: { ...(c.affiliatePriceOverrides?.[key] ?? {}), price_currency: e.target.value },
+                                      },
+                                    }))
+                                  }
+                                  className="rounded border border-white/20 bg-white/5 px-2 py-1.5 text-sm text-hot-white"
+                                  title="Currency"
+                                >
+                                  <option value="">Currency</option>
+                                  {CURRENCY_OPTIONS.map((opt) => (
+                                    <option key={opt.code} value={opt.code}>
+                                      {opt.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-4">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={showPrice}
+                                    onChange={(e) =>
+                                      setConfig((c) => ({
+                                        ...c,
+                                        affiliatePriceOverrides: {
+                                          ...(c.affiliatePriceOverrides ?? {}),
+                                          [key]: { ...(c.affiliatePriceOverrides?.[key] ?? {}), show_price: e.target.checked },
+                                        },
+                                      }))
+                                    }
+                                    className="rounded border-white/20"
+                                  />
+                                  <span className="font-sans text-xs text-gray-400">Show price</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                  <input
+                                    type="checkbox"
+                                    checked={showRetailer}
+                                    onChange={(e) =>
+                                      setConfig((c) => ({
+                                        ...c,
+                                        affiliatePriceOverrides: {
+                                          ...(c.affiliatePriceOverrides ?? {}),
+                                          [key]: { ...(c.affiliatePriceOverrides?.[key] ?? {}), show_retailer: e.target.checked },
+                                        },
+                                      }))
+                                    }
+                                    className="rounded border-white/20"
+                                  />
+                                  <span className="font-sans text-xs text-gray-400">Show retailer</span>
+                                </label>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
 

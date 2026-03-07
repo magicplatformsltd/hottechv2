@@ -27,6 +27,11 @@ function parseConfig(raw: string | undefined): ProductBoxConfig {
           ? parsed.imageType
           : "transparent",
       descriptionOverride: typeof parsed.descriptionOverride === "string" ? parsed.descriptionOverride : "",
+      showAward: typeof parsed.showAward === "boolean" ? parsed.showAward : true,
+      affiliatePriceOverrides:
+        parsed.affiliatePriceOverrides && typeof parsed.affiliatePriceOverrides === "object"
+          ? parsed.affiliatePriceOverrides
+          : {},
     };
   } catch {
     return { ...DEFAULT_PRODUCT_BOX_CONFIG };

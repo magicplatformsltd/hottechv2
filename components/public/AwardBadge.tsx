@@ -75,31 +75,6 @@ function getShapeBorderRadius(shape: AwardShape): string | number {
   return "9999px";
 }
 
-/** Label font size and wrap: auto by length, or manual scale 1–10. */
-function getLabelFontSize(
-  name: string,
-  labelFontSize: number | undefined,
-  context: "badge" | "preview"
-): { fontSize: string; whiteSpace: "normal" | "nowrap" } {
-  const len = name.length;
-  const isAuto = labelFontSize === undefined || labelFontSize === 0;
-  if (!isAuto && typeof labelFontSize === "number") {
-    const scale = Math.min(10, Math.max(1, labelFontSize));
-    const rem = context === "badge" ? 0.5 + (scale / 10) * 1 : 0.75 + (scale / 10) * 2;
-    return { fontSize: `${rem}rem`, whiteSpace: len > 8 ? "normal" : "nowrap" };
-  }
-  if (len <= 4) {
-    const size = context === "badge" ? "1rem" : "1.75rem";
-    return { fontSize: size, whiteSpace: "nowrap" };
-  }
-  if (len > 8) {
-    const size = context === "badge" ? "0.6rem" : "1rem";
-    return { fontSize: size, whiteSpace: "normal" };
-  }
-  const size = context === "badge" ? "0.7rem" : "1.25rem";
-  return { fontSize: size, whiteSpace: "nowrap" };
-}
-
 /** Lighter metal edge for inner bevel (frame meets center). */
 function getInnerBevelColor(tier: AwardTier, _style: AwardStyleSettings | undefined): string {
   switch (tier) {
@@ -156,16 +131,21 @@ const SHIMMER_GRADIENT = "linear-gradient(135deg, rgba(255,255,255,0.4) 0%, rgba
 const ENGRAVE_SHADOW = "0 1px 1px rgba(255,255,255,0.1), 0 -1px 0 rgba(0,0,0,0.9)";
 const LOGO_DROP_SHADOW = "drop-shadow(0 2px 4px rgba(0,0,0,0.5))";
 
+const NATIVE_BADGE_SIZE_PX = 240;
+
 type AwardBadgeProps = {
   award: ProductAwardRecord;
+  /** Graphical scale (default 1). Badge is rendered at 240px then scaled. */
+  scale?: number;
   className?: string;
 };
 
 /**
  * Medallion: deep recessed center (dark overlay + inner bevel), thick bezel,
- * aggressive 3D extrusion, engraved label. FLAT / isCustom use DB bg_color and text_color.
+ * aggressive 3D extrusion, engraved label. Rendered at fixed native size (240px)
+ * then scaled via CSS transform to avoid internal distortion.
  */
-export function AwardBadge({ award, className = "" }: AwardBadgeProps) {
+export function AwardBadge({ award, scale = 1, className = "" }: AwardBadgeProps) {
   const style = award.style_settings as AwardStyleSettings | undefined;
   const tier: AwardTier =
     award.tier === "GOLD" || award.tier === "SILVER" || award.tier === "BRONZE" ? award.tier : "FLAT";
@@ -199,7 +179,10 @@ export function AwardBadge({ award, className = "" }: AwardBadgeProps) {
   const logoUrl = award.logo_url?.trim() || null;
   const IconComponent = getLucideIcon(award.icon ?? "Award");
   const isAngular = shape === "hexagon" || shape === "diamond" || shape === "square";
-  const labelSize = getLabelFontSize(award.name ?? "—", style?.label_font_size, "badge");
+  const nameLen = (award.name ?? "").length || 1;
+  const autoSize = Math.max(12, Math.min(52, 280 / nameLen));
+  const userSize = style?.label_font_size ?? 0;
+  const finalFontSize = userSize > 0 ? userSize : autoSize;
   const logoScale =
     typeof style?.logo_scale === "number"
       ? Math.min(1.5, Math.max(0.5, style.logo_scale))
@@ -215,92 +198,118 @@ export function AwardBadge({ award, className = "" }: AwardBadgeProps) {
 
   return (
     <span className={`inline-flex shrink-0 ${className}`} title={award.name}>
-      <div style={{ filter }}>
-        <div
-          className="relative flex h-14 w-12 overflow-hidden sm:h-16 sm:w-14"
-          style={{
-            background: bezelBackground,
-            borderWidth: 1,
-            borderStyle: borderStyle as React.CSSProperties["borderStyle"],
-            borderColor: outerBorderColor,
-            ...(useEffects
-              ? {
-                  borderBottomColor: "rgba(255,255,255,0.2)",
-                  borderRightColor: "rgba(255,255,255,0.1)",
-                }
-              : {}),
-            clipPath,
-            borderRadius,
-            boxShadow: useEffects ? INSET_BEVEL : undefined,
-          }}
-        >
-          {useEffects && (
-            <div
-              className="pointer-events-none absolute inset-0"
-              aria-hidden
-              style={{
-                background: SHIMMER_GRADIENT,
-                clipPath: clipPath ?? "border-box",
-                borderRadius,
-              }}
-            />
-          )}
-          {/* Inner shield: top-seal layout — logo top 20%, label middle (safe zone), justify-center for balance */}
+      <div
+        className="flex items-center justify-center"
+        style={{ transform: `scale(${scale})`, transformOrigin: "center" }}
+      >
+        <div className="flex items-center justify-center" style={{ filter }}>
           <div
-            className="absolute inset-4 flex flex-col justify-center pt-6 sm:inset-5 sm:pt-8"
+            className="relative flex overflow-hidden shrink-0"
             style={{
-              background: hasDarkCenter ? shieldBackground : "transparent",
-              borderWidth: hasDarkCenter ? 1 : 0,
-              borderStyle: "solid",
-              borderColor: hasDarkCenter ? innerBevelColor : "transparent",
-              boxShadow: innerShieldShadow,
-              clipPath: clipPath ?? "border-box",
-              borderRadius: isAngular ? 0 : "9999px",
+              width: NATIVE_BADGE_SIZE_PX,
+              height: NATIVE_BADGE_SIZE_PX,
+              background: bezelBackground,
+              borderWidth: 1,
+              borderStyle: borderStyle as React.CSSProperties["borderStyle"],
+              ...(useEffects
+                ? {
+                    borderTopColor: outerBorderColor,
+                    borderLeftColor: outerBorderColor,
+                    borderBottomColor: "rgba(255,255,255,0.2)",
+                    borderRightColor: "rgba(255,255,255,0.1)",
+                  }
+                : {
+                    borderTopColor: outerBorderColor,
+                    borderRightColor: outerBorderColor,
+                    borderBottomColor: outerBorderColor,
+                    borderLeftColor: outerBorderColor,
+                  }),
+              clipPath,
+              borderRadius,
+              boxShadow: useEffects ? INSET_BEVEL : undefined,
             }}
           >
-            {/* Logo area: top 20% like official stamp, with top spacing */}
-            <div className="flex min-h-0 flex-[0_0_20%] items-center justify-center">
+            {useEffects && (
               <div
-                className="relative flex h-5 w-5 flex-shrink-0 items-center justify-center overflow-hidden sm:h-6 sm:w-6"
+                className="pointer-events-none absolute inset-0"
+                aria-hidden
                 style={{
-                  clipPath: clipPath ?? "circle(50%)",
-                  borderRadius: isAngular ? 0 : "50%",
-                  filter: logoUrl ? LOGO_DROP_SHADOW : undefined,
-                  transform: `translateY(${logoYOffset}px) scale(${logoScale})`,
+                  background: SHIMMER_GRADIENT,
+                  clipPath: clipPath ?? "border-box",
+                  borderRadius,
                 }}
-              >
-                {logoUrl ? (
-                  <Image
-                    src={logoUrl}
-                    alt=""
-                    fill
-                    className="object-contain"
-                    sizes="24px"
-                  />
-                ) : (
-                  <IconComponent
-                    className="h-4 w-4 shrink-0 sm:h-5 sm:w-5"
-                    style={{ color: hasDarkCenter ? innerTextColor : (style?.text_color ?? "#eab308") }}
-                  />
-                )}
+              />
+            )}
+            {/* Inner shield: fixed insets relative to 240px canvas */}
+            <div
+              className="absolute flex flex-col items-center justify-center pt-12"
+              style={{
+                inset: 32,
+                background: hasDarkCenter ? shieldBackground : "transparent",
+                borderWidth: hasDarkCenter ? 1 : 0,
+                borderStyle: "solid",
+                ...(hasDarkCenter
+                  ? {
+                      borderTopColor: innerBevelColor,
+                      borderRightColor: innerBevelColor,
+                      borderBottomColor: innerBevelColor,
+                      borderLeftColor: innerBevelColor,
+                    }
+                  : {
+                      borderTopColor: "transparent",
+                      borderRightColor: "transparent",
+                      borderBottomColor: "transparent",
+                      borderLeftColor: "transparent",
+                    }),
+                boxShadow: innerShieldShadow,
+                clipPath: clipPath ?? "border-box",
+                borderRadius: isAngular ? 0 : "9999px",
+              }}
+            >
+              <div className="flex flex-[0_0_48px] items-center justify-center">
+                <div
+                  className="relative flex items-center justify-center overflow-hidden"
+                  style={{
+                    width: 48,
+                    height: 48,
+                    clipPath: clipPath ?? "circle(50%)",
+                    borderRadius: isAngular ? 0 : "50%",
+                    filter: logoUrl ? LOGO_DROP_SHADOW : undefined,
+                    transform: `translateY(${logoYOffset}px) scale(${logoScale})`,
+                  }}
+                >
+                  {logoUrl ? (
+                    <Image
+                      src={logoUrl}
+                      alt=""
+                      fill
+                      className="object-contain"
+                      sizes="48px"
+                    />
+                  ) : (
+                    <IconComponent
+                      className="h-8 w-8 shrink-0"
+                      style={{ color: hasDarkCenter ? innerTextColor : (style?.text_color ?? "#eab308") }}
+                    />
+                  )}
+                </div>
               </div>
-            </div>
-            {/* Label area: primary middle, safe zone (overflow hidden), translateY for offset */}
-            <div className="flex min-h-0 flex-1 flex-col items-center justify-center overflow-hidden px-0.5 py-0">
-              <span
-                className="max-w-full text-center font-bold uppercase leading-tight"
-                style={{
-                  color: hasDarkCenter ? innerTextColor : (style?.text_color ?? "#eab308"),
-                  fontFamily: '"Inter Tight", "ui-sans-serif", system-ui, sans-serif',
-                  letterSpacing: "0.02em",
-                  fontSize: labelSize.fontSize,
-                  whiteSpace: labelSize.whiteSpace,
-                  textShadow: hasDarkCenter ? ENGRAVE_SHADOW : undefined,
-                  transform: `translateY(${labelYOffset}px)`,
-                }}
-              >
-                {award.name || "—"}
-              </span>
+              <div className="flex flex-1 flex-col items-center justify-center text-center min-h-0 w-full px-3 overflow-visible">
+                <span
+                  className="w-full px-2 text-center whitespace-normal leading-[1.1] flex-shrink-0 font-bold uppercase"
+                  style={{
+                    fontSize: `${finalFontSize}px`,
+                    textWrap: "balance",
+                    color: hasDarkCenter ? innerTextColor : (style?.text_color ?? "#eab308"),
+                    fontFamily: '"Inter Tight", "ui-sans-serif", system-ui, sans-serif',
+                    letterSpacing: "0.02em",
+                    textShadow: hasDarkCenter ? ENGRAVE_SHADOW : undefined,
+                    transform: `translateY(${labelYOffset}px)`,
+                  }}
+                >
+                  {award.name || "—"}
+                </span>
+              </div>
             </div>
           </div>
         </div>

@@ -27,7 +27,7 @@ export type AwardStyleSettings = {
   depth?: number;
   /** When true, use bezel_color and shield_color (and text_color) from DB. */
   isCustom?: boolean;
-  /** Label font size: 0 = auto (scale by length), 1–10 = manual scale. */
+  /** Label font size: 0 = Auto-fit; 4–48 = exact pixel size (step 4). */
   label_font_size?: number;
   /** Logo scale factor (0.5–1.5). Default 1.0. */
   logo_scale?: number;

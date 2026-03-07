@@ -79,7 +79,7 @@ export async function upsertAward(
     typeof rawStyle?.inner_depth === "number" ? clamp(rawStyle.inner_depth) : 0;
   const labelFontSize =
     typeof rawStyle?.label_font_size === "number"
-      ? Math.min(10, Math.max(0, rawStyle.label_font_size))
+      ? Math.min(48, Math.max(0, rawStyle.label_font_size))
       : 0;
   const logoScale =
     typeof rawStyle?.logo_scale === "number"

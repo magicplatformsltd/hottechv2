@@ -76,6 +76,18 @@ export const DEFAULT_KEY_TAKEAWAYS_DATA: KeyTakeawaysData = {
   items: [""],
 };
 
+/** Post-specific override per retailer (price, CTA text, visibility). */
+export type AffiliatePriceOverride = {
+  price_amount?: string;
+  price_currency?: string;
+  /** Custom CTA button label (e.g. "Buy now"). */
+  cta_text?: string;
+  /** Show price on button (default true). */
+  show_price?: boolean;
+  /** Show retailer name on button (default true). */
+  show_retailer?: boolean;
+};
+
 /** Product box block (inline product card): config from TipTap node. */
 export type ProductBoxBlockConfig = {
   showStarRating?: boolean;
@@ -84,6 +96,8 @@ export type ProductBoxBlockConfig = {
   keySpecKeys?: string[];
   includeAffiliateButtons?: boolean;
   selectedAffiliates?: string[];
+  /** Post-specific price/currency per retailer (key = retailer name). */
+  affiliatePriceOverrides?: Record<string, AffiliatePriceOverride>;
   showImage?: boolean;
   imageType?: "transparent" | "hero";
   descriptionOverride?: string;
