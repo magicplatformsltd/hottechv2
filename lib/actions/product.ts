@@ -158,3 +158,127 @@ export async function searchProducts(query: string): Promise<Product[]> {
   }
   return (data ?? []) as Product[];
 }
+
+/** Linked product with is_primary from post_products junction. */
+export type LinkedProduct = { product: Product; is_primary: boolean };
+
+const EDITOR_PATH = "/admin/posts";
+
+export async function getLinkedProducts(postId: string): Promise<LinkedProduct[]> {
+  if (!postId?.trim()) return [];
+  const client = await createClient();
+  const { data, error } = await client
+    .from("post_products")
+    .select("product_id, is_primary, products(*)")
+    .eq("post_id", postId.trim())
+    .order("is_primary", { ascending: false });
+
+  if (error) {
+    console.error("[getLinkedProducts]", error);
+    return [];
+  }
+  const rows = (data ?? []) as { product_id: string; is_primary: boolean; products: Product | null }[];
+  return rows
+    .filter((row) => row.products != null)
+    .map((row) => ({ product: row.products as Product, is_primary: row.is_primary }));
+}
+
+export async function linkProductToPost(
+  postId: string,
+  productId: string
+): Promise<{ error?: string }> {
+  if (!postId?.trim() || !productId?.trim()) {
+    return { error: "Post ID and product ID are required." };
+  }
+  const client = await createClient();
+  const {
+    data: { user },
+  } = await client.auth.getUser();
+  if (!user) return { error: "Unauthorized." };
+
+  const existing = await client
+    .from("post_products")
+    .select("product_id")
+    .eq("post_id", postId.trim());
+  const isFirst = (existing.data?.length ?? 0) === 0;
+
+  const { error } = await client.from("post_products").insert({
+    post_id: postId.trim(),
+    product_id: productId.trim(),
+    is_primary: isFirst,
+  });
+
+  if (error) {
+    console.error("[linkProductToPost]", error);
+    return { error: error.message };
+  }
+  revalidatePath(`${EDITOR_PATH}/${postId}`);
+  revalidatePath("/");
+  return {};
+}
+
+export async function unlinkProduct(
+  postId: string,
+  productId: string
+): Promise<{ error?: string }> {
+  if (!postId?.trim() || !productId?.trim()) {
+    return { error: "Post ID and product ID are required." };
+  }
+  const client = await createClient();
+  const {
+    data: { user },
+  } = await client.auth.getUser();
+  if (!user) return { error: "Unauthorized." };
+
+  const { error } = await client
+    .from("post_products")
+    .delete()
+    .eq("post_id", postId.trim())
+    .eq("product_id", productId.trim());
+
+  if (error) {
+    console.error("[unlinkProduct]", error);
+    return { error: error.message };
+  }
+  revalidatePath(`${EDITOR_PATH}/${postId}`);
+  revalidatePath("/");
+  return {};
+}
+
+export async function setPrimaryProduct(
+  postId: string,
+  productId: string
+): Promise<{ error?: string }> {
+  if (!postId?.trim() || !productId?.trim()) {
+    return { error: "Post ID and product ID are required." };
+  }
+  const client = await createClient();
+  const {
+    data: { user },
+  } = await client.auth.getUser();
+  if (!user) return { error: "Unauthorized." };
+
+  const { error: offError } = await client
+    .from("post_products")
+    .update({ is_primary: false })
+    .eq("post_id", postId.trim());
+
+  if (offError) {
+    console.error("[setPrimaryProduct] clear", offError);
+    return { error: offError.message };
+  }
+
+  const { error: onError } = await client
+    .from("post_products")
+    .update({ is_primary: true })
+    .eq("post_id", postId.trim())
+    .eq("product_id", productId.trim());
+
+  if (onError) {
+    console.error("[setPrimaryProduct] set", onError);
+    return { error: onError.message };
+  }
+  revalidatePath(`${EDITOR_PATH}/${postId}`);
+  revalidatePath("/");
+  return {};
+}

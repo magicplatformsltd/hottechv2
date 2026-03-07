@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import { RefreshCw } from "lucide-react";
 import { upsertProduct } from "@/lib/actions/product";
 import type { Product, ProductSpecs, EditorialData, ProductTemplate, AffiliateLink } from "@/lib/types/product";
 import type { CategoryRow } from "@/lib/actions/categories";
@@ -87,6 +88,17 @@ function entriesToSpecs(entries: SpecEntry[]): ProductSpecs {
   return out;
 }
 
+function slugify(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "")
+    || "";
+}
+
 export function ProductForm({ product, templates = [], categories = [] }: ProductFormProps) {
   const router = useRouter();
   const initial = product ?? emptyProduct();
@@ -102,6 +114,7 @@ export function ProductForm({ product, templates = [], categories = [] }: Produc
   const [name, setName] = useState(initial.name ?? "");
   const [brand, setBrand] = useState(initial.brand ?? "");
   const [slug, setSlug] = useState(initial.slug ?? "");
+  const [slugManuallyEdited, setSlugManuallyEdited] = useState(Boolean(initial.slug?.trim()));
   const [releaseDate, setReleaseDate] = useState(
     initial.release_date ? initial.release_date.slice(0, 10) : ""
   );
@@ -216,6 +229,18 @@ export function ProductForm({ product, templates = [], categories = [] }: Produc
       applyTemplateSchema(template);
     }
   }, [templateId, templates, applyTemplateSchema]);
+
+  useEffect(() => {
+    const nextSlug = slugify(name);
+    if (nextSlug && (!slug.trim() || !slugManuallyEdited)) {
+      setSlug(nextSlug);
+    }
+  }, [name, slugManuallyEdited]);
+
+  const syncSlugFromName = useCallback(() => {
+    setSlug(slugify(name));
+    setSlugManuallyEdited(false);
+  }, [name]);
 
   const addSpec = useCallback(() => {
     setSpecEntries((prev) => [...prev, { key: "", value: "" }]);
@@ -417,14 +442,28 @@ export function ProductForm({ product, templates = [], categories = [] }: Produc
                 </div>
                 <div>
                   <label className={labelClass}>Slug</label>
-                  <input
-                    type="text"
-                    value={slug}
-                    onChange={(e) => setSlug(e.target.value)}
-                    className={inputClass}
-                    placeholder="url-slug"
-                    required
-                  />
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      value={slug}
+                      onChange={(e) => {
+                        setSlug(e.target.value);
+                        setSlugManuallyEdited(true);
+                      }}
+                      className={inputClass}
+                      placeholder="url-slug"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={syncSlugFromName}
+                      className="shrink-0 rounded border border-white/10 bg-white/5 p-2 text-gray-400 hover:bg-white/10 hover:text-hot-white"
+                      title="Re-sync slug from name"
+                      aria-label="Re-sync slug from name"
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
                 <div>
                   <label className={labelClass}>Release Date</label>

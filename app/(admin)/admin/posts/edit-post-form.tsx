@@ -14,6 +14,8 @@ import { SidebarSection } from "@/app/components/admin/posts/SidebarSection";
 import { ShowcaseManager, type ShowcaseItem } from "@/app/components/admin/posts/ShowcaseManager";
 import { TagInput, type SelectedTag } from "@/app/components/admin/posts/TagInput";
 import { UniversalImagePicker } from "@/app/components/admin/shared/UniversalImagePicker";
+import { ProductLinker } from "@/components/admin/editor/ProductLinker";
+import type { LinkedProduct } from "@/lib/actions/product";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 
 const DEFAULT_TIMEZONE = "America/New_York";
@@ -79,6 +81,7 @@ type EditPostFormProps = {
   initialTagIds: number[];
   initialContentTypeId: number | null;
   siteTimezone?: string;
+  initialLinkedProducts?: LinkedProduct[];
 };
 
 export function EditPostForm({
@@ -90,6 +93,7 @@ export function EditPostForm({
   initialTagIds,
   initialContentTypeId,
   siteTimezone = DEFAULT_TIMEZONE,
+  initialLinkedProducts = [],
 }: EditPostFormProps) {
   const router = useRouter();
   const [title, setTitle] = useState(post?.title ?? "");
@@ -576,6 +580,16 @@ export function EditPostForm({
             selectedTags={selectedTags}
             onChange={setSelectedTags}
           />
+        </SidebarSection>
+
+        <SidebarSection title="Products" defaultOpen={true}>
+          {post?.id ? (
+            <ProductLinker postId={post.id} initialLinked={initialLinkedProducts} />
+          ) : (
+            <div className="rounded-md border border-white/10 bg-white/5 px-3 py-4 text-center font-sans text-sm text-gray-400">
+              Please save this post as a draft before linking hardware products.
+            </div>
+          )}
         </SidebarSection>
 
         <SidebarSection title="Featured Image" defaultOpen={false}>
