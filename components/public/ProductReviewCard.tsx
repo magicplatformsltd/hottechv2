@@ -259,7 +259,7 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
   const showSpecsAttr = isShow(data.show_specs);
   const showBreakdownAttr = isShow(data.show_breakdown);
   const showProsConsAttr = isShow(data.show_pros_cons);
-  const showBuyIfAttr = data.show_buy_if === true || data.show_buy_if === "true";
+  const showBuyIfAttr = data.show_buy_if === true;
   const [product, setProduct] = useState<Product | null>(null);
   const [template, setTemplate] = useState<ProductTemplate | null>(null);
   const [award, setAward] = useState<Awaited<ReturnType<typeof getAwardById>>>(null);
@@ -422,7 +422,7 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
                     if (typeof val === "string") return val.trim() !== "";
                     if (Array.isArray(val) && val.length > 0 && val[0] != null && "dust" in val[0] && "water" in val[0])
                       return true;
-                    if (Array.isArray(val)) return val.some((x) => ((x.value1 ?? "") + (x.value2 ?? "")).trim() !== "");
+                    if (Array.isArray(val)) return val.some((x: any) => ((x.value1 ?? x.dust ?? "") + (x.value2 ?? x.water ?? "")).trim() !== "");
                     if (val && typeof val === "object" && !Array.isArray(val) && "value" in val) return true;
                     if (val && typeof val === "object" && !Array.isArray(val) && "mp" in val && "ois" in val)
                       return formatCameraLensForDisplay(val as CameraLensData).length > 0;

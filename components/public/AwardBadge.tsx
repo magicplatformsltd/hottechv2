@@ -289,7 +289,7 @@ export function AwardBadge({ award, scale = 1, className = "" }: AwardBadgeProps
                   ) : (
                     <IconComponent
                       className="h-8 w-8 shrink-0"
-                      style={{ color: hasDarkCenter ? innerTextColor : (style?.text_color ?? "#eab308") }}
+                      {...({ style: { color: hasDarkCenter ? innerTextColor : (style?.text_color ?? "#eab308") } } as any)}
                     />
                   )}
                 </div>

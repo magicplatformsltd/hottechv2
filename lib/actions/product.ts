@@ -186,7 +186,7 @@ export async function getLinkedProducts(postId: string): Promise<LinkedProduct[]
     console.error("[getLinkedProducts]", error);
     return [];
   }
-  const rows = (data ?? []) as { product_id: string; is_primary: boolean; products: Product | null }[];
+  const rows = (data ?? []) as unknown as { product_id: string; is_primary: boolean; products: Product | null }[];
   return rows
     .filter((row) => row.products != null)
     .map((row) => ({ product: row.products as Product, is_primary: row.is_primary }));

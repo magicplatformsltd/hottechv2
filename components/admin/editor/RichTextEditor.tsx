@@ -14,7 +14,7 @@ import { ImageGalleryExtension } from "./extensions/ImageGallery";
 import { ImageComparisonExtension } from "./extensions/ImageComparison";
 import { PullQuoteExtension } from "./extensions/PullQuote";
 import { KeyTakeawaysExtension } from "./extensions/KeyTakeaways";
-import { ProductBoxExtension, PRODUCT_BOX_EDIT_EVENT, DEFAULT_PRODUCT_BOX_CONFIG, type ProductBoxConfig } from "./extensions/ProductBox";
+import { ProductBoxExtension, PRODUCT_BOX_EDIT_EVENT, DEFAULT_PRODUCT_BOX_CONFIG, type ProductBoxConfig, type ProductBoxTemplate } from "./extensions/ProductBox";
 import { ProductInjectionModal } from "./ProductInjectionModal";
 import type { ProductBoxInsertPayload } from "./ProductInjectionModal";
 import {
@@ -305,7 +305,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         productId,
         productName: detail.productName ?? "",
         config: detail.config ?? {},
-        template: detail.template,
+        template: detail.template as ProductBoxTemplate | undefined,
         show_image: detail.show_image,
         show_award: detail.show_award,
         show_specs: detail.show_specs,

@@ -160,14 +160,14 @@ function initializeSpecs(
       ? (productSpecs as Record<string, string>)
       : {};
   // When re-applying (e.g. switching template), flatten nested so we preserve values by spec name
-  const flatFromNested: Record<string, string> = nested
+  const flatFromNested: Record<string, any> = nested
     ? Object.values(nested).reduce(
         (acc, group) => {
           if (group && typeof group === "object")
             for (const [k, v] of Object.entries(group)) if (typeof v === "string") acc[k] = v;
           return acc;
         },
-        {} as Record<string, string>
+        {} as Record<string, any>
       )
     : {};
   const out: ProductSpecsNested = {};
@@ -182,8 +182,8 @@ function initializeSpecs(
         const raw = nested?.[groupName]?.[name];
         const arr = Array.isArray(raw)
           ? (raw as VariantMatrixEntry[]).map((x) => ({
-              value1: typeof (x as { value1?: string }).value1 === "string" ? (x as VariantMatrixEntry).value1 : typeof (x as { ram?: string }).ram === "string" ? (x as { ram: string }).ram : "",
-              value2: typeof (x as { value2?: string }).value2 === "string" ? (x as VariantMatrixEntry).value2 : typeof (x as { storage?: string }).storage === "string" ? (x as { storage: string }).storage : "",
+              value1: (x as any).value1 ?? (x as any).ram ?? "",
+              value2: (x as any).value2 ?? (x as any).storage ?? "",
             }))
           : [{ value1: "", value2: "" }];
         out[groupName][name] = arr.length > 0 ? arr : [{ value1: "", value2: "" }];
@@ -307,7 +307,7 @@ export function ProductForm({ product, templates = [], categories = [], awards =
   const [awardSearchOpen, setAwardSearchOpen] = useState(false);
   const [awardSearchQuery, setAwardSearchQuery] = useState("");
   const [affiliateLinks, setAffiliateLinks] = useState<AffiliateLink[]>(() =>
-    normalizeAffiliateLinks(initial.affiliate_links)
+    normalizeAffiliateLinks(initial.affiliate_links as any)
   );
   const [heroImage, setHeroImage] = useState<string | null>(
     initial.hero_image ?? null
