@@ -34,6 +34,11 @@ function getAffiliateKeys(product: Product | null): string[] {
   return [];
 }
 
+/** Strictly parse boolean from node attrs (handles string "true"/"false" from HTML). */
+function isTrue(val: unknown, defaultVal: boolean): boolean {
+  return val === undefined ? defaultVal : val === true || val === "true";
+}
+
 export type ProductBoxInsertPayload = {
   productId: string;
   productName: string;
@@ -44,8 +49,13 @@ export type ProductBoxInsertPayload = {
   show_specs?: boolean;
   show_breakdown?: boolean;
   show_pros_cons?: boolean;
+  show_buy_if?: boolean;
+  show_bottom_line?: boolean;
+  show_star_rating?: boolean;
   custom_pros?: string | null;
   custom_cons?: string | null;
+  custom_buy_if?: string | null;
+  custom_dont_buy_if?: string | null;
 };
 
 type ProductInjectionModalProps = {
@@ -79,6 +89,11 @@ export function ProductInjectionModal({
   const [show_pros_cons, setShow_pros_cons] = useState(true);
   const [custom_pros, setCustom_pros] = useState("");
   const [custom_cons, setCustom_cons] = useState("");
+  const [show_buy_if, setShow_buy_if] = useState(false);
+  const [show_bottom_line, setShow_bottom_line] = useState(true);
+  const [show_star_rating, setShow_star_rating] = useState(true);
+  const [custom_buy_if, setCustom_buy_if] = useState("");
+  const [custom_dont_buy_if, setCustom_dont_buy_if] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerTemplates, setDrawerTemplates] = useState<Awaited<ReturnType<typeof getTemplates>>>([]);
   const [drawerCategories, setDrawerCategories] = useState<Awaited<ReturnType<typeof getCategories>>>([]);
@@ -110,11 +125,40 @@ export function ProductInjectionModal({
       setSelectedProduct({ id: editState.productId, name: editState.productName } as Product);
       setConfig({ ...DEFAULT_PRODUCT_BOX_CONFIG, ...editState.config });
       setTemplate(editState.template ?? "full_card");
-      setShow_image(editState.show_image ?? true);
-      setShow_award(editState.show_award ?? true);
-      setShow_specs(editState.show_specs ?? true);
-      setShow_breakdown(editState.show_breakdown ?? true);
-      setShow_pros_cons(editState.show_pros_cons ?? true);
+      setShow_image(isTrue(editState.show_image, true));
+      setShow_award(isTrue(editState.show_award, true));
+      setShow_specs(isTrue(editState.show_specs, true));
+      setShow_breakdown(isTrue(editState.show_breakdown, true));
+      setShow_pros_cons(isTrue(editState.show_pros_cons, true));
+      setShow_buy_if(isTrue(editState.show_buy_if, false));
+      setShow_bottom_line(isTrue(editState.show_bottom_line, true));
+      setShow_star_rating(isTrue(editState.show_star_rating, true));
+      try {
+        const rawBuyIf = editState.custom_buy_if;
+        if (Array.isArray(rawBuyIf)) {
+          setCustom_buy_if(rawBuyIf.join("\n"));
+        } else if (typeof rawBuyIf === "string") {
+          const parsed = JSON.parse(rawBuyIf);
+          setCustom_buy_if(Array.isArray(parsed) ? parsed.join("\n") : rawBuyIf);
+        } else {
+          setCustom_buy_if("");
+        }
+      } catch {
+        setCustom_buy_if(typeof editState.custom_buy_if === "string" ? editState.custom_buy_if : "");
+      }
+      try {
+        const rawDontBuyIf = editState.custom_dont_buy_if;
+        if (Array.isArray(rawDontBuyIf)) {
+          setCustom_dont_buy_if(rawDontBuyIf.join("\n"));
+        } else if (typeof rawDontBuyIf === "string") {
+          const parsed = JSON.parse(rawDontBuyIf);
+          setCustom_dont_buy_if(Array.isArray(parsed) ? parsed.join("\n") : rawDontBuyIf);
+        } else {
+          setCustom_dont_buy_if("");
+        }
+      } catch {
+        setCustom_dont_buy_if(typeof editState.custom_dont_buy_if === "string" ? editState.custom_dont_buy_if : "");
+      }
       try {
         const rawPros = editState.custom_pros;
         if (Array.isArray(rawPros)) {
@@ -157,8 +201,13 @@ export function ProductInjectionModal({
       setShow_specs(true);
       setShow_breakdown(true);
       setShow_pros_cons(true);
+      setShow_buy_if(false);
+      setShow_bottom_line(true);
+      setShow_star_rating(true);
       setCustom_pros("");
       setCustom_cons("");
+      setCustom_buy_if("");
+      setCustom_dont_buy_if("");
       setSearchQuery("");
       setSearchResults([]);
     }
@@ -225,8 +274,13 @@ export function ProductInjectionModal({
     setShow_specs(true);
     setShow_breakdown(true);
     setShow_pros_cons(true);
+    setShow_buy_if(false);
+    setShow_bottom_line(true);
+    setShow_star_rating(true);
     setCustom_pros("");
     setCustom_cons("");
+    setCustom_buy_if("");
+    setCustom_dont_buy_if("");
     setStep("configure");
   }, []);
 
@@ -238,18 +292,30 @@ export function ProductInjectionModal({
       setShow_specs(true);
       setShow_breakdown(true);
       setShow_pros_cons(true);
+      setShow_buy_if(false);
     } else if (templateId === "compact") {
       setShow_image(true);
       setShow_award(true);
       setShow_specs(false);
       setShow_breakdown(false);
       setShow_pros_cons(false);
+      setShow_buy_if(false);
     } else if (templateId === "spec_sheet") {
       setShow_image(false);
       setShow_award(false);
       setShow_specs(true);
       setShow_breakdown(false);
       setShow_pros_cons(false);
+      setShow_buy_if(false);
+    } else if (templateId === "buy_if_block") {
+      setShow_image(false);
+      setShow_award(false);
+      setShow_specs(false);
+      setShow_breakdown(false);
+      setShow_pros_cons(false);
+      setShow_buy_if(true);
+      setShow_bottom_line(false);
+      setShow_star_rating(false);
     }
   }, []);
 
@@ -264,6 +330,8 @@ export function ProductInjectionModal({
     if (!product) return;
     const prosTrimmed = custom_pros.trim();
     const consTrimmed = custom_cons.trim();
+    const buyIfTrimmed = custom_buy_if.trim();
+    const dontBuyIfTrimmed = custom_dont_buy_if.trim();
     onInsert({
       productId: product.id,
       productName: product.name ?? editState?.productName ?? "",
@@ -274,11 +342,16 @@ export function ProductInjectionModal({
       show_specs,
       show_breakdown,
       show_pros_cons,
+      show_buy_if,
+      show_bottom_line,
+      show_star_rating,
       custom_pros: prosTrimmed ? JSON.stringify(prosTrimmed.split(/\n/).map((s) => s.trim()).filter(Boolean)) : null,
       custom_cons: consTrimmed ? JSON.stringify(consTrimmed.split(/\n/).map((s) => s.trim()).filter(Boolean)) : null,
+      custom_buy_if: buyIfTrimmed ? JSON.stringify(buyIfTrimmed.split(/\n/).map((s) => s.trim()).filter(Boolean)) : null,
+      custom_dont_buy_if: dontBuyIfTrimmed ? JSON.stringify(dontBuyIfTrimmed.split(/\n/).map((s) => s.trim()).filter(Boolean)) : null,
     });
     onClose();
-  }, [productContext, selectedProduct, editState?.productName, config, template, show_image, show_award, show_specs, show_breakdown, show_pros_cons, custom_pros, custom_cons, onInsert, onClose]);
+  }, [productContext, selectedProduct, editState?.productName, config, template, show_image, show_award, show_specs, show_breakdown, show_pros_cons, show_buy_if, show_bottom_line, show_star_rating, custom_pros, custom_cons, custom_buy_if, custom_dont_buy_if, onInsert, onClose]);
 
   const toggleKeySpec = useCallback((key: string) => {
     setConfig((prev) => {
@@ -446,6 +519,7 @@ export function ProductInjectionModal({
                   <option value="full_card">Full Review</option>
                   <option value="compact">Compact Deal</option>
                   <option value="spec_sheet">Spec Sheet</option>
+                  <option value="buy_if_block">Buy If / Don&apos;t Buy If Block</option>
                 </select>
               </div>
 
@@ -504,11 +578,29 @@ export function ProductInjectionModal({
                     <label className="flex items-center gap-2 cursor-pointer">
                       <input
                         type="checkbox"
-                        checked={config.showStarRating ?? true}
-                        onChange={(e) => setConfig((c) => ({ ...c, showStarRating: e.target.checked }))}
+                        checked={show_star_rating}
+                        onChange={(e) => setShow_star_rating(e.target.checked)}
                         className="rounded border-white/20"
                       />
                       <span className="font-sans text-sm text-hot-white">Show Star Rating</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={show_buy_if}
+                        onChange={(e) => setShow_buy_if(e.target.checked)}
+                        className="rounded border-white/20"
+                      />
+                      <span className="font-sans text-sm text-hot-white">Show Buying Advice</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={show_bottom_line}
+                        onChange={(e) => setShow_bottom_line(e.target.checked)}
+                        className="rounded border-white/20"
+                      />
+                      <span className="font-sans text-sm text-hot-white">Show Bottom Line</span>
                     </label>
                   </div>
 
@@ -599,6 +691,62 @@ export function ProductInjectionModal({
                           value={custom_cons}
                           onChange={(e) => setCustom_cons(e.target.value)}
                           placeholder="One per line (leave blank to use global cons)"
+                          rows={2}
+                          className="w-full rounded-md border border-white/20 bg-white/5 px-3 py-2 font-sans text-sm text-hot-white placeholder:text-gray-500 focus:border-hot-white/50 focus:outline-none resize-y"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  {show_buy_if && (
+                    <>
+                      {(productContext?.editorial_data?.buy_if?.length || productContext?.editorial_data?.dont_buy_if?.length) ? (
+                        <div className="rounded-md border border-white/10 bg-white/5 overflow-hidden">
+                          <div className="flex items-center justify-end gap-2 border-b border-white/10 bg-white/5 px-2 py-1">
+                            <span className="text-[10px] font-medium uppercase tracking-wide text-gray-500">
+                              GLOBAL REFERENCE
+                            </span>
+                          </div>
+                          <div className="px-3 py-2 space-y-2">
+                            {productContext?.editorial_data?.buy_if?.length ? (
+                              <div>
+                                <span className="text-[10px] font-medium uppercase text-gray-500">Buy If:</span>
+                                <ul className="mt-0.5 font-mono text-xs italic text-gray-400 list-disc list-inside">
+                                  {productContext.editorial_data.buy_if.map((s, i) => (
+                                    <li key={i}>{s}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ) : null}
+                            {productContext?.editorial_data?.dont_buy_if?.length ? (
+                              <div>
+                                <span className="text-[10px] font-medium uppercase text-gray-500">Don&apos;t Buy If:</span>
+                                <ul className="mt-0.5 font-mono text-xs italic text-gray-400 list-disc list-inside">
+                                  {productContext.editorial_data.dont_buy_if.map((s, i) => (
+                                    <li key={i}>{s}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            ) : null}
+                          </div>
+                        </div>
+                      ) : null}
+                      <div>
+                        <label className="block font-sans text-sm font-medium text-gray-400 mb-1">Custom &quot;Buy If&quot; Override</label>
+                        <textarea
+                          value={custom_buy_if}
+                          onChange={(e) => setCustom_buy_if(e.target.value)}
+                          placeholder="One per line (leave blank to use global Buy If)"
+                          rows={2}
+                          className="w-full rounded-md border border-white/20 bg-white/5 px-3 py-2 font-sans text-sm text-hot-white placeholder:text-gray-500 focus:border-hot-white/50 focus:outline-none resize-y"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-sans text-sm font-medium text-gray-400 mb-1">Custom &quot;Don&apos;t Buy If&quot; Override</label>
+                        <textarea
+                          value={custom_dont_buy_if}
+                          onChange={(e) => setCustom_dont_buy_if(e.target.value)}
+                          placeholder="One per line (leave blank to use global Don't Buy If)"
                           rows={2}
                           className="w-full rounded-md border border-white/20 bg-white/5 px-3 py-2 font-sans text-sm text-hot-white placeholder:text-gray-500 focus:border-hot-white/50 focus:outline-none resize-y"
                         />

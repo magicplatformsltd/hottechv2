@@ -248,6 +248,11 @@ function extractProductBoxBlocks(html: string): { index: number; data: ProductBo
     const templateMatch = tag.match(/data-template="([^"]*)"/);
     const customProsMatch = tag.match(/data-custom-pros="((?:[^"\\]|\\.)*)"/);
     const customConsMatch = tag.match(/data-custom-cons="((?:[^"\\]|\\.)*)"/);
+    const showBuyIf = tag.match(/data-show-buy-if="([^"]*)"/)?.[1] === "true";
+    const showBottomLine = getBoolAttr(tag, "show-bottom-line");
+    const showStarRating = getBoolAttr(tag, "show-star-rating");
+    const customBuyIfMatch = tag.match(/data-custom-buy-if="((?:[^"\\]|\\.)*)"/);
+    const customDontBuyIfMatch = tag.match(/data-custom-dont-buy-if="((?:[^"\\]|\\.)*)"/);
     const productId = idMatch?.[1] ?? "";
     const productName = nameMatch?.[1] ?? "";
     let config: ProductBoxBlockConfig = {};
@@ -284,6 +289,26 @@ function extractProductBoxBlocks(html: string): { index: number; data: ProductBo
         custom_cons = customConsMatch[1];
       }
     }
+    let custom_buy_if: string | string[] | null = null;
+    if (customBuyIfMatch?.[1]) {
+      try {
+        const decoded = decodeAttrValue(customBuyIfMatch[1].replace(/\\"/g, '"'));
+        const parsed = JSON.parse(decoded);
+        custom_buy_if = Array.isArray(parsed) ? parsed : decoded;
+      } catch {
+        custom_buy_if = customBuyIfMatch[1];
+      }
+    }
+    let custom_dont_buy_if: string | string[] | null = null;
+    if (customDontBuyIfMatch?.[1]) {
+      try {
+        const decoded = decodeAttrValue(customDontBuyIfMatch[1].replace(/\\"/g, '"'));
+        const parsed = JSON.parse(decoded);
+        custom_dont_buy_if = Array.isArray(parsed) ? parsed : decoded;
+      } catch {
+        custom_dont_buy_if = customDontBuyIfMatch[1];
+      }
+    }
     const endTagStart = m.index + tag.length;
     const endIndex = findMatchingDivEnd(html, endTagStart);
     const length = endIndex - m.index;
@@ -299,8 +324,13 @@ function extractProductBoxBlocks(html: string): { index: number; data: ProductBo
         show_specs,
         show_breakdown,
         show_pros_cons,
+        show_buy_if: showBuyIf,
+        show_bottom_line: showBottomLine,
+        show_star_rating: showStarRating,
         custom_pros,
         custom_cons,
+        custom_buy_if,
+        custom_dont_buy_if,
       },
       length,
     });

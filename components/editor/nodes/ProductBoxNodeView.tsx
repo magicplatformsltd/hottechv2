@@ -61,8 +61,13 @@ export function ProductBoxNodeView({ node, getPos, editor }: NodeViewProps) {
           show_specs: node.attrs.show_specs !== false,
           show_breakdown: node.attrs.show_breakdown !== false,
           show_pros_cons: node.attrs.show_pros_cons !== false,
+          show_buy_if: node.attrs.show_buy_if === true,
+          show_bottom_line: node.attrs.show_bottom_line !== false,
+          show_star_rating: node.attrs.show_star_rating !== false,
           custom_pros: node.attrs.custom_pros ?? null,
           custom_cons: node.attrs.custom_cons ?? null,
+          custom_buy_if: node.attrs.custom_buy_if ?? null,
+          custom_dont_buy_if: node.attrs.custom_dont_buy_if ?? null,
           position: pos,
         },
       })

@@ -289,8 +289,13 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         show_specs?: boolean;
         show_breakdown?: boolean;
         show_pros_cons?: boolean;
+        show_buy_if?: boolean;
+        show_bottom_line?: boolean;
+        show_star_rating?: boolean;
         custom_pros?: string | null;
         custom_cons?: string | null;
+        custom_buy_if?: string | null;
+        custom_dont_buy_if?: string | null;
         position: number;
       }>;
       const detail = ev.detail ?? {};
@@ -306,8 +311,13 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         show_specs: detail.show_specs,
         show_breakdown: detail.show_breakdown,
         show_pros_cons: detail.show_pros_cons,
+        show_buy_if: detail.show_buy_if,
+        show_bottom_line: detail.show_bottom_line,
+        show_star_rating: detail.show_star_rating,
         custom_pros: detail.custom_pros ?? null,
         custom_cons: detail.custom_cons ?? null,
+        custom_buy_if: detail.custom_buy_if ?? null,
+        custom_dont_buy_if: detail.custom_dont_buy_if ?? null,
       });
       productEditPositionRef.current = position;
       setProductModalOpen(true);
@@ -330,8 +340,13 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         show_specs: payload.show_specs ?? true,
         show_breakdown: payload.show_breakdown ?? true,
         show_pros_cons: payload.show_pros_cons ?? true,
+        show_buy_if: payload.show_buy_if ?? false,
+        show_bottom_line: payload.show_bottom_line ?? true,
+        show_star_rating: payload.show_star_rating ?? true,
         custom_pros: payload.custom_pros ?? null,
         custom_cons: payload.custom_cons ?? null,
+        custom_buy_if: payload.custom_buy_if ?? null,
+        custom_dont_buy_if: payload.custom_dont_buy_if ?? null,
       };
       if (pos != null) {
         editor

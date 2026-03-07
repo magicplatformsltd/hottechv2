@@ -33,11 +33,15 @@ export type AffiliateLink = {
 /** Affiliate links: array form (preferred) or legacy key-value. */
 export type AffiliateLinks = AffiliateLink[] | Record<string, string>;
 
-/** Editorial review data: bottom line, pros, cons, sub-scores, final score. */
+/** Editorial review data: bottom line, pros, cons, buy/dont-buy advice, sub-scores, final score. */
 export type EditorialData = {
   bottom_line?: string;
   pros?: string[];
   cons?: string[];
+  /** Global "Buy If" reasons (one per line in CMS). */
+  buy_if?: string[];
+  /** Global "Don't Buy If" reasons (one per line in CMS). */
+  dont_buy_if?: string[];
   sub_scores?: Record<string, number>;
   final_score?: number;
 };

@@ -74,7 +74,7 @@ function parseConfig(raw: string | undefined): ProductBoxConfig {
   }
 }
 
-export type ProductBoxTemplate = "full_card" | "compact" | "spec_sheet";
+export type ProductBoxTemplate = "full_card" | "compact" | "spec_sheet" | "buy_if_block";
 
 export type ProductBoxAttrs = {
   productId: string;
@@ -86,8 +86,13 @@ export type ProductBoxAttrs = {
   show_specs?: boolean;
   show_breakdown?: boolean;
   show_pros_cons?: boolean;
+  show_buy_if?: boolean;
+  show_bottom_line?: boolean;
+  show_star_rating?: boolean;
   custom_pros?: string | null;
   custom_cons?: string | null;
+  custom_buy_if?: string | null;
+  custom_dont_buy_if?: string | null;
 };
 
 declare module "@tiptap/core" {
@@ -125,33 +130,58 @@ export const ProductBoxExtension = Node.create({
       },
       template: {
         default: "full_card",
-        parseHTML: (el) => (el.getAttribute("data-template") as "full_card" | "compact" | "spec_sheet") ?? "full_card",
+        parseHTML: (el) => (el.getAttribute("data-template") as ProductBoxTemplate) ?? "full_card",
         renderHTML: (attrs) => ({ "data-template": attrs.template ?? "full_card" }),
       },
       show_image: {
         default: true,
-        parseHTML: (el) => el.getAttribute("data-show-image") !== "false",
-        renderHTML: (attrs) => ({ "data-show-image": attrs.show_image === false ? "false" : "true" }),
+        parseHTML: (element) => {
+          const attr = element.getAttribute("data-show-image");
+          if (attr === "false") return false;
+          if (attr === "true") return true;
+          return true;
+        },
+        renderHTML: (attributes) => ({ "data-show-image": String(attributes.show_image) }),
       },
       show_award: {
         default: true,
-        parseHTML: (el) => el.getAttribute("data-show-award") !== "false",
-        renderHTML: (attrs) => ({ "data-show-award": attrs.show_award === false ? "false" : "true" }),
+        parseHTML: (element) => {
+          const attr = element.getAttribute("data-show-award");
+          if (attr === "false") return false;
+          if (attr === "true") return true;
+          return true;
+        },
+        renderHTML: (attributes) => ({ "data-show-award": String(attributes.show_award) }),
       },
       show_specs: {
         default: true,
-        parseHTML: (el) => el.getAttribute("data-show-specs") !== "false",
-        renderHTML: (attrs) => ({ "data-show-specs": attrs.show_specs === false ? "false" : "true" }),
+        parseHTML: (element) => {
+          const attr = element.getAttribute("data-show-specs");
+          if (attr === "false") return false;
+          if (attr === "true") return true;
+          return true;
+        },
+        renderHTML: (attributes) => ({ "data-show-specs": String(attributes.show_specs) }),
       },
       show_breakdown: {
         default: true,
-        parseHTML: (el) => el.getAttribute("data-show-breakdown") !== "false",
-        renderHTML: (attrs) => ({ "data-show-breakdown": attrs.show_breakdown === false ? "false" : "true" }),
+        parseHTML: (element) => {
+          const attr = element.getAttribute("data-show-breakdown");
+          if (attr === "false") return false;
+          if (attr === "true") return true;
+          return true;
+        },
+        renderHTML: (attributes) => ({ "data-show-breakdown": String(attributes.show_breakdown) }),
       },
       show_pros_cons: {
         default: true,
-        parseHTML: (el) => el.getAttribute("data-show-pros-cons") !== "false",
-        renderHTML: (attrs) => ({ "data-show-pros-cons": attrs.show_pros_cons === false ? "false" : "true" }),
+        parseHTML: (element) => {
+          const attr = element.getAttribute("data-show-pros-cons");
+          if (attr === "false") return false;
+          if (attr === "true") return true;
+          return true;
+        },
+        renderHTML: (attributes) => ({ "data-show-pros-cons": String(attributes.show_pros_cons) }),
       },
       custom_pros: {
         default: null,
@@ -167,6 +197,52 @@ export const ProductBoxExtension = Node.create({
         renderHTML: (attrs) =>
           attrs.custom_cons != null && attrs.custom_cons !== ""
             ? { "data-custom-cons": typeof attrs.custom_cons === "string" ? attrs.custom_cons : JSON.stringify(attrs.custom_cons) }
+            : {},
+      },
+      show_buy_if: {
+        default: false,
+        parseHTML: (element) => {
+          const attr = element.getAttribute("data-show-buy-if");
+          if (attr === "false") return false;
+          if (attr === "true") return true;
+          return false;
+        },
+        renderHTML: (attributes) => ({ "data-show-buy-if": String(attributes.show_buy_if) }),
+      },
+      show_bottom_line: {
+        default: true,
+        parseHTML: (element) => {
+          const attr = element.getAttribute("data-show-bottom-line");
+          if (attr === "false") return false;
+          if (attr === "true") return true;
+          return true;
+        },
+        renderHTML: (attributes) => ({ "data-show-bottom-line": String(attributes.show_bottom_line) }),
+      },
+      show_star_rating: {
+        default: true,
+        parseHTML: (element) => {
+          const attr = element.getAttribute("data-show-star-rating");
+          if (attr === "false") return false;
+          if (attr === "true") return true;
+          return true;
+        },
+        renderHTML: (attributes) => ({ "data-show-star-rating": String(attributes.show_star_rating) }),
+      },
+      custom_buy_if: {
+        default: null,
+        parseHTML: (el) => el.getAttribute("data-custom-buy-if") ?? null,
+        renderHTML: (attrs) =>
+          attrs.custom_buy_if != null && attrs.custom_buy_if !== ""
+            ? { "data-custom-buy-if": typeof attrs.custom_buy_if === "string" ? attrs.custom_buy_if : JSON.stringify(attrs.custom_buy_if) }
+            : {},
+      },
+      custom_dont_buy_if: {
+        default: null,
+        parseHTML: (el) => el.getAttribute("data-custom-dont-buy-if") ?? null,
+        renderHTML: (attrs) =>
+          attrs.custom_dont_buy_if != null && attrs.custom_dont_buy_if !== ""
+            ? { "data-custom-dont-buy-if": typeof attrs.custom_dont_buy_if === "string" ? attrs.custom_dont_buy_if : JSON.stringify(attrs.custom_dont_buy_if) }
             : {},
       },
     };
@@ -188,16 +264,25 @@ export const ProductBoxExtension = Node.create({
       "data-product-name": node.attrs.productName,
       "data-product-config": node.attrs.config,
       "data-template": node.attrs.template ?? "full_card",
-      "data-show-image": node.attrs.show_image === false ? "false" : "true",
-      "data-show-award": node.attrs.show_award === false ? "false" : "true",
-      "data-show-specs": node.attrs.show_specs === false ? "false" : "true",
-      "data-show-breakdown": node.attrs.show_breakdown === false ? "false" : "true",
-      "data-show-pros-cons": node.attrs.show_pros_cons === false ? "false" : "true",
+      "data-show-image": String(node.attrs.show_image),
+      "data-show-award": String(node.attrs.show_award),
+      "data-show-specs": String(node.attrs.show_specs),
+      "data-show-breakdown": String(node.attrs.show_breakdown),
+      "data-show-pros-cons": String(node.attrs.show_pros_cons),
       ...(node.attrs.custom_pros != null && node.attrs.custom_pros !== ""
         ? { "data-custom-pros": typeof node.attrs.custom_pros === "string" ? node.attrs.custom_pros : JSON.stringify(node.attrs.custom_pros) }
         : {}),
       ...(node.attrs.custom_cons != null && node.attrs.custom_cons !== ""
         ? { "data-custom-cons": typeof node.attrs.custom_cons === "string" ? node.attrs.custom_cons : JSON.stringify(node.attrs.custom_cons) }
+        : {}),
+      "data-show-buy-if": String(node.attrs.show_buy_if),
+      "data-show-bottom-line": String(node.attrs.show_bottom_line),
+      "data-show-star-rating": String(node.attrs.show_star_rating),
+      ...(node.attrs.custom_buy_if != null && node.attrs.custom_buy_if !== ""
+        ? { "data-custom-buy-if": typeof node.attrs.custom_buy_if === "string" ? node.attrs.custom_buy_if : JSON.stringify(node.attrs.custom_buy_if) }
+        : {}),
+      ...(node.attrs.custom_dont_buy_if != null && node.attrs.custom_dont_buy_if !== ""
+        ? { "data-custom-dont-buy-if": typeof node.attrs.custom_dont_buy_if === "string" ? node.attrs.custom_dont_buy_if : JSON.stringify(node.attrs.custom_dont_buy_if) }
         : {}),
     });
 
@@ -240,8 +325,13 @@ export const ProductBoxExtension = Node.create({
               show_specs: attrs.show_specs ?? true,
               show_breakdown: attrs.show_breakdown ?? true,
               show_pros_cons: attrs.show_pros_cons ?? true,
+              show_buy_if: attrs.show_buy_if ?? false,
+              show_bottom_line: attrs.show_bottom_line ?? true,
+              show_star_rating: attrs.show_star_rating ?? true,
               custom_pros: attrs.custom_pros ?? null,
               custom_cons: attrs.custom_cons ?? null,
+              custom_buy_if: attrs.custom_buy_if ?? null,
+              custom_dont_buy_if: attrs.custom_dont_buy_if ?? null,
             },
           });
         },

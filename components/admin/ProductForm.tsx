@@ -159,6 +159,12 @@ export function ProductForm({ product, templates = [], categories = [], awards =
       ? [...initial.editorial_data.cons]
       : [""]
   );
+  const [buyIfText, setBuyIfText] = useState(
+    (initial.editorial_data?.buy_if?.length ? initial.editorial_data.buy_if.join("\n") : "") ?? ""
+  );
+  const [dontBuyIfText, setDontBuyIfText] = useState(
+    (initial.editorial_data?.dont_buy_if?.length ? initial.editorial_data.dont_buy_if.join("\n") : "") ?? ""
+  );
   const [subScores, setSubScores] = useState<SubScoreEntry[]>(() => {
     const ed = initial.editorial_data?.sub_scores;
     if (ed && Object.keys(ed).length > 0) {
@@ -325,6 +331,14 @@ export function ProductForm({ product, templates = [], categories = [], awards =
     bottom_line: bottomLine.trim() || undefined,
     pros: pros.filter((p) => p.trim()).length ? pros.map((p) => p.trim()).filter(Boolean) : undefined,
     cons: cons.filter((c) => c.trim()).length ? cons.map((c) => c.trim()).filter(Boolean) : undefined,
+    buy_if: (() => {
+      const lines = buyIfText.split(/\n/).map((s) => s.trim()).filter(Boolean);
+      return lines.length ? lines : undefined;
+    })(),
+    dont_buy_if: (() => {
+      const lines = dontBuyIfText.split(/\n/).map((s) => s.trim()).filter(Boolean);
+      return lines.length ? lines : undefined;
+    })(),
     sub_scores: (() => {
       const finalSubScores = subScores.reduce<Record<string, number>>((acc, curr) => {
         const L = curr.label?.trim();
@@ -350,7 +364,7 @@ export function ProductForm({ product, templates = [], categories = [], awards =
         url: item.url?.trim() ?? "",
         price: item.price?.trim() || undefined,
         price_amount: item.price_amount?.trim() || undefined,
-        price_currency: item.price_currency?.trim() || undefined,
+        price_currency: item.price_currency?.trim() || DEFAULT_CURRENCY_CODE,
       }))
       .filter((item) => item.retailer || item.url);
 
@@ -698,47 +712,47 @@ export function ProductForm({ product, templates = [], categories = [], awards =
               </p>
               <div className="space-y-3">
                 {affiliateLinks.map((link, i) => (
-                  <div key={i} className="flex flex-col gap-2 rounded border border-white/10 bg-white/5 p-2 sm:flex-row sm:flex-wrap sm:items-center">
+                  <div key={i} className="grid grid-cols-12 gap-2 w-full rounded border border-white/10 bg-white/5 p-2">
                     <input
                       type="text"
                       value={link.retailer ?? ""}
                       onChange={(e) => updateAffiliateLink(i, "retailer", e.target.value)}
-                      className={`${inputClass} min-w-0 flex-1`}
+                      className={`${inputClass} col-span-3 w-full`}
                       placeholder="Retailer (e.g. Amazon)"
                     />
                     <input
                       type="url"
                       value={link.url ?? ""}
                       onChange={(e) => updateAffiliateLink(i, "url", e.target.value)}
-                      className={`${inputClass} min-w-0 flex-1`}
+                      className={`${inputClass} col-span-5 w-full`}
                       placeholder="URL"
                     />
-                    <div className="flex min-w-0 flex-1 items-center gap-2">
+                    <div className="col-span-2">
                       <input
                         type="text"
                         value={link.price_amount ?? ""}
                         onChange={(e) => updateAffiliateLink(i, "price_amount", e.target.value)}
-                        className={`${inputClass} min-w-0 flex-1`}
+                        className={`${inputClass} w-full`}
                         placeholder="Price (e.g. 49.99)"
                       />
-                      <select
-                        value={link.price_currency ?? ""}
-                        onChange={(e) => updateAffiliateLink(i, "price_currency", e.target.value)}
-                        className={inputClass}
-                        title="Currency"
-                      >
-                        <option value="">Currency</option>
-                        {CURRENCY_OPTIONS.map((opt) => (
-                          <option key={opt.code} value={opt.code}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
                     </div>
+                    <select
+                      value={link.price_currency || DEFAULT_CURRENCY_CODE}
+                      onChange={(e) => updateAffiliateLink(i, "price_currency", e.target.value)}
+                      className={`${inputClass} col-span-2 w-full`}
+                      title="Currency"
+                      aria-label="Currency"
+                    >
+                      {CURRENCY_OPTIONS.map((opt) => (
+                        <option key={opt.code} value={opt.code}>
+                          {opt.symbol}
+                        </option>
+                      ))}
+                    </select>
                     <button
                       type="button"
                       onClick={() => removeAffiliateLink(i)}
-                      className="shrink-0 rounded border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-red-400 hover:bg-red-500/10"
+                      className="col-span-12 rounded border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-red-400 hover:bg-red-500/10 w-fit"
                       aria-label="Remove link"
                     >
                       Remove
@@ -826,6 +840,34 @@ export function ProductForm({ product, templates = [], categories = [], awards =
                       </button>
                     </div>
                   ))}
+                </div>
+              </div>
+              <div className="rounded-md border border-white/10 bg-white/5 p-4 space-y-4">
+                <h3 className="font-sans text-sm font-medium text-hot-white">
+                  Buying Advice (Global Defaults)
+                </h3>
+                <p className="text-xs text-gray-500">
+                  Global default reasons to buy or avoid this product. One per line.
+                </p>
+                <div>
+                  <label className={labelClass}>Buy If</label>
+                  <textarea
+                    value={buyIfText}
+                    onChange={(e) => setBuyIfText(e.target.value)}
+                    className={textareaClass}
+                    placeholder="e.g. You want the best battery life&#10;You need a large display"
+                    rows={3}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Don&apos;t Buy If</label>
+                  <textarea
+                    value={dontBuyIfText}
+                    onChange={(e) => setDontBuyIfText(e.target.value)}
+                    className={textareaClass}
+                    placeholder="e.g. You need a headphone jack&#10;Budget is under $500"
+                    rows={3}
+                  />
                 </div>
               </div>
             </section>

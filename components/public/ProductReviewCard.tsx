@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import Image from "next/image";
-import { Plus, Minus } from "lucide-react";
+import { Plus, Minus, CheckCircle, XCircle } from "lucide-react";
 import { getProductById } from "@/lib/actions/product";
 import { getTemplateById } from "@/lib/actions/template";
 import { getAwardById } from "@/lib/actions/award";
@@ -93,11 +93,14 @@ function normalizeCustomList(raw: string | string[] | null | undefined): string[
 
 export function ProductReviewCard({ data, className = "" }: ProductReviewCardProps) {
   const { productId, productName, config } = data;
-  const showImageAttr = data.show_image !== false;
-  const showAwardAttr = data.show_award !== false;
-  const showSpecsAttr = data.show_specs !== false;
-  const showBreakdownAttr = data.show_breakdown !== false;
-  const showProsConsAttr = data.show_pros_cons !== false;
+  // Strict boolean: only explicit false (boolean or string "false") hides; backward compat treats undefined as show
+  const isShow = (v: unknown) => v !== false && v !== "false";
+  const showImageAttr = isShow(data.show_image);
+  const showAwardAttr = isShow(data.show_award);
+  const showSpecsAttr = isShow(data.show_specs);
+  const showBreakdownAttr = isShow(data.show_breakdown);
+  const showProsConsAttr = isShow(data.show_pros_cons);
+  const showBuyIfAttr = data.show_buy_if === true || data.show_buy_if === "true";
   const [product, setProduct] = useState<Product | null>(null);
   const [template, setTemplate] = useState<ProductTemplate | null>(null);
   const [award, setAward] = useState<Awaited<ReturnType<typeof getAwardById>>>(null);
@@ -217,6 +220,14 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
   const displayPros = customProsList.length > 0 ? customProsList : (product.editorial_data?.pros ?? []);
   const displayCons = customConsList.length > 0 ? customConsList : (product.editorial_data?.cons ?? []);
 
+  // Buy If / Don't Buy If: post-level overrides (data.custom_*) take precedence over global (product.editorial_data)
+  const customBuyIfList = normalizeCustomList(data.custom_buy_if);
+  const customDontBuyIfList = normalizeCustomList(data.custom_dont_buy_if);
+  const buyIf = customBuyIfList.length > 0 ? customBuyIfList : (product.editorial_data?.buy_if ?? []);
+  const dontBuyIf = customDontBuyIfList.length > 0 ? customDontBuyIfList : (product.editorial_data?.dont_buy_if ?? []);
+  const hasBuyIf = buyIf.length > 0;
+  const hasDontBuyIf = dontBuyIf.length > 0;
+
   const primaryAffiliate = displayAffiliates[0];
   const secondaryAffiliates = displayAffiliates.slice(1);
 
@@ -260,7 +271,7 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
             <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">
               {product.name}
             </h2>
-            {displayDescription && (
+            {isShow(data.show_bottom_line) && displayDescription && (
               <p className="text-lg opacity-90 leading-relaxed text-gray-700 dark:text-gray-200">
                 {displayDescription}
               </p>
@@ -277,7 +288,7 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
                 <AwardBadge award={award} scale={0.5} />
               </div>
             )}
-            {showStarRating && finalScore != null && (
+            {isShow(data.show_star_rating) && showStarRating && finalScore != null && (
               <div
                 className="shrink-0 flex items-center justify-center rounded-full border-2 border-amber-400/80 bg-amber-500/20 dark:bg-amber-500/15 w-16 h-16 sm:w-20 sm:h-20"
                 aria-label={`Score: ${Number(finalScore).toFixed(1)} out of 10`}
@@ -392,6 +403,48 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
                         aria-hidden
                       />
                       <span>{con}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Buy If / Don't Buy If — conversion block right above CTA */}
+        {showBuyIfAttr && (hasBuyIf || hasDontBuyIf) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8 border-t border-white/10 pt-8">
+            {hasBuyIf && (
+              <div className="bg-green-500/5 border border-green-500/20 rounded-xl p-6">
+                <h3 className="text-green-400 font-bold mb-4">
+                  Buy it if...
+                </h3>
+                <ul className="space-y-2">
+                  {buyIf.map((item, i) => (
+                    <li
+                      key={i}
+                      className="text-sm text-gray-700 dark:text-gray-200 flex items-start gap-2"
+                    >
+                      <CheckCircle className="h-4 w-4 shrink-0 text-green-600 dark:text-green-400 mt-0.5" aria-hidden />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {hasDontBuyIf && (
+              <div className="bg-red-500/5 border border-red-500/20 rounded-xl p-6">
+                <h3 className="text-red-400 font-bold mb-4">
+                  Don&apos;t buy it if...
+                </h3>
+                <ul className="space-y-2">
+                  {dontBuyIf.map((item, i) => (
+                    <li
+                      key={i}
+                      className="text-sm text-gray-700 dark:text-gray-200 flex items-start gap-2"
+                    >
+                      <XCircle className="h-4 w-4 shrink-0 text-red-600 dark:text-red-400 mt-0.5" aria-hidden />
+                      <span>{item}</span>
                     </li>
                   ))}
                 </ul>

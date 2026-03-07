@@ -120,4 +120,11 @@ export type ProductBoxBlockData = {
   custom_pros?: string | string[] | null;
   /** JSON array string or string[] override for cons */
   custom_cons?: string | string[] | null;
+  show_buy_if?: boolean;
+  show_bottom_line?: boolean;
+  show_star_rating?: boolean;
+  /** JSON array string or string[] override for buy_if */
+  custom_buy_if?: string | string[] | null;
+  /** JSON array string or string[] override for dont_buy_if */
+  custom_dont_buy_if?: string | string[] | null;
 };
