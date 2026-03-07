@@ -431,6 +431,7 @@ export function ProductForm({ product, brands = [], tags = [], templates = [], c
   );
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [submitAction, setSubmitAction] = useState<"save" | "publish">("save");
   const [error, setError] = useState("");
   const [publishDateLocal, setPublishDateLocal] = useState(() =>
     toDatetimeLocalInTz(product?.published_at ?? null, PRODUCT_PUBLISH_TIMEZONE)
@@ -871,19 +872,29 @@ export function ProductForm({ product, brands = [], tags = [], templates = [], c
       })(),
       tag_ids,
     };
-    const result = await upsertProduct(payload);
+    const result = await upsertProduct(payload, { publish: submitAction === "publish" });
     setSaving(false);
     if (result.error) {
       setError(result.error);
       return;
     }
-    const wasDraftOrPending =
-      product?.status === "draft" || product?.status === "pending_review";
-    if (product && wasDraftOrPending) {
-      toast.success("Draft Saved");
-    } else if (product?.id) {
-      toast.success("Product updated");
+    if (submitAction === "publish" && result.product?.id) {
+      const utcIso = publishDateLocal ? fromDatetimeLocalToUtc(publishDateLocal, PRODUCT_PUBLISH_TIMEZONE) : null;
+      toast.success(
+        statusDropdown === "scheduled" && utcIso
+          ? `Scheduled for ${formatInTimeZone(new Date(utcIso), PRODUCT_PUBLISH_TIMEZONE, "MMM d, yyyy 'at' h:mm a zzz")}`
+          : "Published"
+      );
+    } else {
+      const wasDraftOrPending =
+        product?.status === "draft" || product?.status === "pending_review";
+      if (product && wasDraftOrPending) {
+        toast.success("Draft Saved");
+      } else if (product?.id) {
+        toast.success("Product updated");
+      }
     }
+    setSubmitAction("save");
     if (product?.id) {
       router.refresh();
       return;
@@ -964,33 +975,18 @@ export function ProductForm({ product, brands = [], tags = [], templates = [], c
                 )}
                 {product?.id && (
                   <button
-                    type="button"
-                    disabled={publishing}
-                    onClick={async () => {
-                      if (!product?.id) return;
-                      setPublishing(true);
-                      setError("");
-                      const utcIso = publishDateLocal
-                        ? fromDatetimeLocalToUtc(publishDateLocal, PRODUCT_PUBLISH_TIMEZONE)
-                        : undefined;
-                      const result = await publishProductDraft(product.id, utcIso || undefined);
-                      setPublishing(false);
-                      if (result.error) {
-                        setError(result.error);
-                        return;
-                      }
-                      if (isScheduled && utcIso) {
-                        toast.success(
-                          `Scheduled for ${formatInTimeZone(new Date(utcIso), PRODUCT_PUBLISH_TIMEZONE, "MMM d, yyyy 'at' h:mm a zzz")}`
-                        );
-                      } else {
-                        toast.success("Published");
-                      }
-                      router.refresh();
-                    }}
+                    type="submit"
+                    disabled={saving}
+                    onClick={() => setSubmitAction("publish")}
                     className="flex items-center justify-center gap-2 rounded-md bg-green-600 px-4 py-2 font-sans text-sm font-medium text-white transition-colors hover:bg-green-500 disabled:opacity-50 shrink-0"
                   >
-                    {publishing ? (isScheduled ? "Scheduling…" : "Publishing…") : isScheduled ? "Schedule" : "Publish"}
+                    {saving && submitAction === "publish"
+                      ? isScheduled
+                        ? "Scheduling…"
+                        : "Publishing…"
+                      : isScheduled
+                        ? "Schedule"
+                        : "Publish"}
                   </button>
                 )}
               </div>
@@ -1022,9 +1018,10 @@ export function ProductForm({ product, brands = [], tags = [], templates = [], c
               <button
                 type="submit"
                 disabled={saving}
+                onClick={() => setSubmitAction("save")}
                 className="rounded-md bg-hot-white px-4 py-2 font-sans text-sm font-medium text-hot-black transition-colors hover:bg-hot-white/90 disabled:opacity-50 shrink-0"
               >
-                {saving ? "Saving…" : product ? "Update Product" : "Create Product"}
+                {saving && submitAction === "save" ? "Saving…" : product ? "Update Product" : "Create Product"}
               </button>
               <button
                 type="button"

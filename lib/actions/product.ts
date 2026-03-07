@@ -298,8 +298,11 @@ export async function getProductsByTemplateId(templateId: string): Promise<Produ
   return (data ?? []) as Product[];
 }
 
+export type UpsertProductOptions = { publish?: boolean };
+
 export async function upsertProduct(
-  data: Partial<Product> & { tag_ids?: number[] }
+  data: Partial<Product> & { tag_ids?: number[] },
+  options?: UpsertProductOptions
 ): Promise<{ product?: Product; error?: string }> {
   const client = await createClient();
   const {
@@ -338,6 +341,14 @@ export async function upsertProduct(
         return { error: error.message };
       }
       await syncProductTags(client, id, tagIds);
+      if (options?.publish) {
+        const publishResult = await publishProductDraft(id, rowData.published_at ?? undefined);
+        if (publishResult.error) return { error: publishResult.error };
+        revalidatePath("/admin/products");
+        revalidatePath(`/admin/products/${id}`);
+        revalidatePath("/");
+        return { product: publishResult.product ?? (updated as Product) };
+      }
       revalidatePath("/admin/products");
       revalidatePath(`/admin/products/${id}`);
       revalidatePath("/");
@@ -357,6 +368,13 @@ export async function upsertProduct(
       return { error: error.message };
     }
     await syncProductTags(client, id, tagIds);
+    if (options?.publish) {
+      const publishResult = await publishProductDraft(id, rowData.published_at ?? undefined);
+      if (publishResult.error) return { error: publishResult.error };
+      revalidatePath("/admin/products");
+      revalidatePath("/");
+      return { product: publishResult.product ?? (updated as Product) };
+    }
     revalidatePath("/admin/products");
     revalidatePath("/");
     return { product: updated as Product };
@@ -409,6 +427,13 @@ export async function upsertProduct(
   }
   const productId = (created as { id?: string })?.id;
   if (productId) await syncProductTags(client, productId, tagIds);
+  if (options?.publish && productId) {
+    const publishResult = await publishProductDraft(productId, rowData.published_at ?? undefined);
+    if (publishResult.error) return { error: publishResult.error };
+    revalidatePath("/admin/products");
+    revalidatePath("/");
+    return { product: publishResult.product ?? (created as Product) };
+  }
   revalidatePath("/admin/products");
   revalidatePath("/");
   return { product: created as Product };
