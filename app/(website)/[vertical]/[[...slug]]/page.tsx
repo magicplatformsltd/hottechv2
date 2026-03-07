@@ -9,6 +9,8 @@ import { getProductBySlug, getProductsByTemplateId } from "@/lib/actions/product
 import {
   getPostBySlug,
   getPostByPrimaryProductAndType,
+  getPostByPrimaryProductAndTypeAnyStatus,
+  getPostByIdForPreview,
   getLatestPublishedPosts,
   type SupabasePost,
   type LatestPostItem,
@@ -22,16 +24,13 @@ import { getBaseUrl } from "@/lib/url";
 import { generateProductSchema } from "@/lib/schema/product-jsonld";
 import { getSpecsForSchema } from "@/lib/format-specs";
 import { getTemplateSchemaAsGroups } from "@/lib/types/template";
+import { isPublished, isPreviewMode, getProductForDisplay } from "@/lib/content-helpers";
+import { getIsAdmin } from "@/lib/auth";
 
 type PageProps = {
   params: Promise<{ vertical: string; slug?: string[] }>;
+  searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
-
-function isPublishedPost(post: SupabasePost): boolean {
-  if (post.status !== "published") return false;
-  if (post.published_at && new Date(post.published_at) > new Date()) return false;
-  return true;
-}
 
 /** Level 1: Category Hub — valid template slug, no slug segments */
 async function resolveLevel1(vertical: string) {
@@ -45,13 +44,13 @@ async function resolveLevel1(vertical: string) {
   return { type: "category" as const, template, products, latestPosts };
 }
 
-/** Level 3: /[vertical]/[productSlug]/review — full editorial review */
+/** Level 3: /[vertical]/[productSlug]/review — full editorial review. Uses AnyStatus so admin can see draft/scheduled. */
 async function resolveLevel3(vertical: string, productSlug: string) {
   const product = await getProductBySlug(productSlug);
   if (!product) return null;
   const template = product.template_id ? await getTemplateById(product.template_id) : null;
-  const post = await getPostByPrimaryProductAndType(product.id, "reviews");
-  if (!post || !isPublishedPost(post)) return null;
+  const post = await getPostByPrimaryProductAndTypeAnyStatus(product.id, "reviews");
+  if (!post) return null;
   return { type: "review" as const, product, template, post };
 }
 
@@ -65,7 +64,7 @@ async function resolveLevel2(vertical: string, slugPart: string) {
       type: "product" as const,
       product,
       template,
-      reviewPost: reviewPost && isPublishedPost(reviewPost) ? reviewPost : null,
+      reviewPost: reviewPost && isPublished(reviewPost) ? reviewPost : null,
     };
   }
 
@@ -93,9 +92,7 @@ async function resolveLevel2(vertical: string, slugPart: string) {
   }
 
   const post = await getPostBySlug(slugPart);
-  if (post && isPublishedPost(post)) {
-    return { type: "post" as const, post };
-  }
+  if (post) return { type: "post" as const, post };
   return null;
 }
 
@@ -179,10 +176,13 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   return {};
 }
 
-export default async function VerticalPage({ params }: PageProps) {
+export default async function VerticalPage({ params, searchParams: searchParamsPromise }: PageProps) {
   const { vertical, slug } = await params;
   const slugParts = slug ?? [];
   const baseUrl = getBaseUrl().replace(/\/$/, "");
+  const searchParams = searchParamsPromise ? await searchParamsPromise : {};
+  const isAdmin = await getIsAdmin();
+  const showDraft = isAdmin && isPreviewMode(searchParams);
 
   // Resolver logs (STEP 105 – remove after debugging)
   console.log("[Unified Resolver]", { vertical, slug, slugParts, segmentCount: slugParts.length });
@@ -203,11 +203,11 @@ export default async function VerticalPage({ params }: PageProps) {
         <h1 className="font-serif text-4xl font-bold text-hot-white mb-2">{r.template.name}</h1>
         <p className="text-gray-400 font-sans text-lg mb-10">Browse devices and latest news.</p>
 
-        {r.products.length > 0 && (
+        {r.products.filter((p) => isPublished(p)).length > 0 && (
           <section className="mb-12">
             <h2 className="text-xl font-semibold text-hot-white mb-4">Devices</h2>
             <ul className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {r.products.map((p) => (
+              {r.products.filter((p) => isPublished(p)).map((p) => (
                 <li key={p.id}>
                   <Link
                     href={`/${vertical}/${p.slug ?? p.id}`}
@@ -253,12 +253,19 @@ export default async function VerticalPage({ params }: PageProps) {
     const fallback = await resolveLevel2(vertical, vertical);
     if (fallback) {
       if (fallback.type === "product") {
+        if (!isPublished(fallback.product) && !isAdmin) notFound();
+        const product = getProductForDisplay(fallback.product, showDraft);
         const schema = getTemplateSchemaAsGroups(fallback.template?.spec_schema);
-        const specsForSchema = schema.length > 0 ? getSpecsForSchema(fallback.product.specs, schema) : {};
-        const productSchema = generateProductSchema(fallback.product, { specsForSchema });
-        const imageUrl = fallback.product.transparent_image ?? fallback.product.hero_image;
+        const specsForSchema = schema.length > 0 ? getSpecsForSchema(product.specs, schema) : {};
+        const productSchema = generateProductSchema(product, { specsForSchema });
+        const imageUrl = product.transparent_image ?? product.hero_image;
         return (
           <>
+            {showDraft && (
+              <div className="sticky top-0 left-0 right-0 z-40 border-b border-amber-500/50 bg-amber-500/20 px-4 py-2 text-center font-sans text-sm font-semibold text-amber-200" role="status">
+                PREVIEW MODE — DRAFT CONTENT
+              </div>
+            )}
             <JsonLd data={productSchema} />
             <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
               <Link href="/" className="mb-8 inline-flex items-center gap-1.5 font-sans text-sm text-gray-400 transition-colors hover:text-hot-white">
@@ -266,24 +273,24 @@ export default async function VerticalPage({ params }: PageProps) {
               </Link>
               <header className="mb-8">
                 <h1 className="font-serif text-4xl md:text-5xl font-bold text-hot-white mb-2">
-                  {fallback.product.brand} {fallback.product.name}
+                  {product.brand} {product.name}
                 </h1>
-                {typeof fallback.product.editorial_data?.final_score === "number" && (
+                {typeof product.editorial_data?.final_score === "number" && (
                   <div className="inline-flex items-center gap-2 rounded-lg bg-amber-500/20 px-3 py-1.5 text-sm font-medium text-amber-200">
-                    Editor&apos;s Rating: {fallback.product.editorial_data.final_score}/10
+                    Editor&apos;s Rating: {product.editorial_data.final_score}/10
                   </div>
                 )}
               </header>
               {imageUrl && (
                 <div className="relative aspect-square max-w-sm mx-auto mb-10">
-                  <Image src={imageUrl} alt={fallback.product.name} fill className="object-contain" priority sizes="384px" />
+                  <Image src={imageUrl} alt={product.name} fill className="object-contain" priority sizes="384px" />
                 </div>
               )}
-              <ProductSpecsTable product={fallback.product} template={fallback.template} className="mb-10" />
+              <ProductSpecsTable product={product} template={fallback.template} className="mb-10" />
               {fallback.reviewPost && (
                 <section className="mt-10">
                   <h2 className="text-xl font-semibold text-hot-white mb-4">Full Review</h2>
-                  <Link href={`/${vertical}/review`} className="inline-flex items-center rounded-md border border-white/20 bg-white/5 px-4 py-2 text-sm font-medium text-hot-white hover:bg-white/10">
+                  <Link href={`/${vertical}/${product.slug}/review`} className="inline-flex items-center rounded-md border border-white/20 bg-white/5 px-4 py-2 text-sm font-medium text-hot-white hover:bg-white/10">
                     Read Full Editorial Review
                   </Link>
                 </section>
@@ -293,6 +300,7 @@ export default async function VerticalPage({ params }: PageProps) {
         );
       }
       if (fallback.type === "versus") {
+        if ((!isPublished(fallback.productA) || !isPublished(fallback.productB)) && !isAdmin) notFound();
         return (
           <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
             <Link href="/" className="mb-8 inline-flex items-center gap-1.5 font-sans text-sm text-gray-400 transition-colors hover:text-hot-white">
@@ -314,6 +322,7 @@ export default async function VerticalPage({ params }: PageProps) {
         );
       }
       if (fallback.type === "post") {
+        if (!isPublished(fallback.post) && !isAdmin) notFound();
         const post = fallback.post;
         const articleUrl = post.slug ? `${baseUrl}/${vertical}/${post.slug}` : baseUrl;
         const imageUrl = post.featured_image?.startsWith("http") ? post.featured_image : post.featured_image ? `${baseUrl}/${post.featured_image.replace(/^\//, "")}` : undefined;
@@ -366,27 +375,35 @@ export default async function VerticalPage({ params }: PageProps) {
   if (isReviewPath && productSlugForReview) {
     const r = await resolveLevel3(vertical, productSlugForReview);
     if (!r) notFound();
+    if (!isPublished(r.post) && !isAdmin) notFound();
+    const postForDisplay = showDraft ? (await getPostByIdForPreview(r.post.id)) ?? r.post : r.post;
     const articleUrl = `${baseUrl}/${vertical}/${productSlugForReview}/review`;
-    const imageUrl = r.post.featured_image?.startsWith("http")
-      ? r.post.featured_image
-      : r.post.featured_image
-        ? `${baseUrl}/${r.post.featured_image.replace(/^\//, "")}`
+    const imageUrl = postForDisplay.featured_image?.startsWith("http")
+      ? postForDisplay.featured_image
+      : postForDisplay.featured_image
+        ? `${baseUrl}/${postForDisplay.featured_image.replace(/^\//, "")}`
         : undefined;
     const newsArticleSchema = {
       "@context": "https://schema.org",
       "@type": "NewsArticle",
-      headline: r.post.title ?? "Untitled",
+      headline: postForDisplay.title ?? "Untitled",
       image: imageUrl ? [imageUrl] : undefined,
-      datePublished: r.post.published_at ?? r.post.created_at ?? undefined,
-      dateModified: r.post.updated_at ?? undefined,
-      author: { "@type": "Person", name: r.post.source_name ?? "Nirave Gondhia" },
+      datePublished: postForDisplay.published_at ?? postForDisplay.created_at ?? undefined,
+      dateModified: postForDisplay.updated_at ?? undefined,
+      author: { "@type": "Person", name: postForDisplay.source_name ?? "Nirave Gondhia" },
       url: articleUrl,
     };
-    const date = r.post.updated_at ?? r.post.created_at;
+    const date = postForDisplay.updated_at ?? postForDisplay.created_at;
+    const postBody = (postForDisplay as { content?: string; body?: string }).content || postForDisplay.body || "";
     return (
       <>
+        {showDraft && (
+          <div className="sticky top-0 left-0 right-0 z-40 border-b border-amber-500/50 bg-amber-500/20 px-4 py-2 text-center font-sans text-sm font-semibold text-amber-200" role="status">
+            PREVIEW MODE — DRAFT CONTENT
+          </div>
+        )}
         <JsonLd data={newsArticleSchema} />
-        <ViewTracker slug={r.post.slug ?? undefined} />
+        <ViewTracker slug={postForDisplay.slug ?? undefined} />
         <article className="mx-auto max-w-4xl px-4 pt-8 sm:px-6 lg:px-8 pb-16">
           <Link
             href={`/${vertical}/${productSlugForReview}`}
@@ -397,17 +414,17 @@ export default async function VerticalPage({ params }: PageProps) {
           </Link>
           <header className="mb-6">
             <h1 className="font-serif text-5xl font-bold text-hot-white mb-6 md:text-6xl">
-              {r.post.title ?? "Untitled"}
+              {postForDisplay.title ?? "Untitled"}
             </h1>
             <div className="flex flex-wrap items-center gap-3 text-gray-400">
               <span className="font-sans text-sm text-hot-white/90">Hot Tech</span>
               {date && <span className="font-sans text-sm">{format(new Date(date), "MMM d, yyyy")}</span>}
             </div>
           </header>
-          {r.post.featured_image && (
+          {postForDisplay.featured_image && (
             <div className="relative my-12 aspect-video w-full overflow-hidden rounded-xl bg-hot-gray">
               <Image
-                src={r.post.featured_image}
+                src={postForDisplay.featured_image}
                 alt=""
                 fill
                 className="object-cover"
@@ -416,10 +433,7 @@ export default async function VerticalPage({ params }: PageProps) {
               />
             </div>
           )}
-          <PostBody
-            html={(r.post as { content?: string; body?: string }).content || r.post.body || ""}
-            className="prose prose-lg prose-invert mx-auto max-w-2xl max-w-none"
-          />
+          <PostBody html={postBody} className="prose prose-lg prose-invert mx-auto max-w-2xl max-w-none" />
         </article>
       </>
     );
@@ -431,12 +445,19 @@ export default async function VerticalPage({ params }: PageProps) {
   if (!r) notFound();
 
   if (r.type === "product") {
+    if (!isPublished(r.product) && !isAdmin) notFound();
+    const product = getProductForDisplay(r.product, showDraft);
     const schema = getTemplateSchemaAsGroups(r.template?.spec_schema);
-    const specsForSchema = schema.length > 0 ? getSpecsForSchema(r.product.specs, schema) : {};
-    const productSchema = generateProductSchema(r.product, { specsForSchema });
-    const imageUrl = r.product.transparent_image ?? r.product.hero_image;
+    const specsForSchema = schema.length > 0 ? getSpecsForSchema(product.specs, schema) : {};
+    const productSchema = generateProductSchema(product, { specsForSchema });
+    const imageUrl = product.transparent_image ?? product.hero_image;
     return (
       <>
+        {showDraft && (
+          <div className="sticky top-0 left-0 right-0 z-40 border-b border-amber-500/50 bg-amber-500/20 px-4 py-2 text-center font-sans text-sm font-semibold text-amber-200" role="status">
+            PREVIEW MODE — DRAFT CONTENT
+          </div>
+        )}
         <JsonLd data={productSchema} />
         <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
           <Link
@@ -448,11 +469,11 @@ export default async function VerticalPage({ params }: PageProps) {
           </Link>
           <header className="mb-8">
             <h1 className="font-serif text-4xl md:text-5xl font-bold text-hot-white mb-2">
-              {r.product.brand} {r.product.name}
+              {product.brand} {product.name}
             </h1>
-            {typeof r.product.editorial_data?.final_score === "number" && (
+            {typeof product.editorial_data?.final_score === "number" && (
               <div className="inline-flex items-center gap-2 rounded-lg bg-amber-500/20 px-3 py-1.5 text-sm font-medium text-amber-200">
-                Editor&apos;s Rating: {r.product.editorial_data.final_score}/10
+                Editor&apos;s Rating: {product.editorial_data.final_score}/10
               </div>
             )}
           </header>
@@ -460,7 +481,7 @@ export default async function VerticalPage({ params }: PageProps) {
             <div className="relative aspect-square max-w-sm mx-auto mb-10">
               <Image
                 src={imageUrl}
-                alt={r.product.name}
+                alt={product.name}
                 fill
                 className="object-contain"
                 priority
@@ -468,7 +489,7 @@ export default async function VerticalPage({ params }: PageProps) {
               />
             </div>
           )}
-          <ProductSpecsTable product={r.product} template={r.template} className="mb-10" />
+          <ProductSpecsTable product={product} template={r.template} className="mb-10" />
           {r.reviewPost && (
             <section className="mt-10">
               <h2 className="text-xl font-semibold text-hot-white mb-4">Full Review</h2>
@@ -486,6 +507,7 @@ export default async function VerticalPage({ params }: PageProps) {
   }
 
   if (r.type === "versus") {
+    if ((!isPublished(r.productA) || !isPublished(r.productB)) && !isAdmin) notFound();
     return (
       <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 lg:px-8">
         <Link
@@ -514,6 +536,7 @@ export default async function VerticalPage({ params }: PageProps) {
   }
 
   // r.type === "post" — standard post (redirect or render; we render for same-route consistency)
+  if (!isPublished(r.post) && !isAdmin) notFound();
   const post = r.post;
   const articleUrl = post.slug ? `${baseUrl}/${vertical}/${post.slug}` : baseUrl;
   const imageUrl = post.featured_image?.startsWith("http")

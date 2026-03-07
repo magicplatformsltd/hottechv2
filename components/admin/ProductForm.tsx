@@ -2,8 +2,9 @@
 
 import { useState, useCallback, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { RefreshCw } from "lucide-react";
-import { upsertProduct } from "@/lib/actions/product";
+import Link from "next/link";
+import { RefreshCw, Eye } from "lucide-react";
+import { upsertProduct, publishProductDraft } from "@/lib/actions/product";
 import type { Product, ProductSpecsNested, EditorialData, ProductTemplate, AffiliateLink, VariantMatrixEntry, IpRatingEntry, BooleanWithDetails, CameraLensData, DisplayPanelData } from "@/lib/types/product";
 import type { ProductSpecsInput } from "@/lib/types/product";
 import { getSpecLabelsFromSchema, getTemplateSchemaAsGroups } from "@/lib/types/template";
@@ -13,6 +14,7 @@ import type { ProductAwardRecord } from "@/lib/types/award";
 import type { CategoryRow } from "@/lib/actions/categories";
 import { UniversalImagePicker } from "@/app/components/admin/shared/UniversalImagePicker";
 import { ChevronDown } from "lucide-react";
+import { toast } from "sonner";
 
 type ProductFormProps = {
   product: Product | null;
@@ -268,9 +270,17 @@ function slugify(text: string): string {
     || "";
 }
 
+/** Merge draft_data over base product so the form shows draft values (e.g. imported products that only have draft_data). */
+function mergeDraftOverProduct(product: Product | null): Partial<Product> {
+  const p = product ?? emptyProduct();
+  const draft = (p as Product).draft_data;
+  if (!draft || typeof draft !== "object") return p as Partial<Product>;
+  return { ...p, ...draft } as Partial<Product>;
+}
+
 export function ProductForm({ product, templates = [], categories = [], awards = [], onSuccess }: ProductFormProps) {
   const router = useRouter();
-  const initial = product ?? emptyProduct();
+  const initial = useMemo(() => mergeDraftOverProduct(product), [product]);
 
   const categoryOptions = useMemo(() => buildCategoryTreeOptions(categories), [categories]);
 
@@ -354,9 +364,15 @@ export function ProductForm({ product, templates = [], categories = [], awards =
     initial.editorial_data?.final_score ?? 0
   );
   const [saving, setSaving] = useState(false);
+  const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState("");
 
   const selectedTemplate = templates.find((t) => t.id === templateId);
+  const previewUrl =
+    product?.slug && selectedTemplate?.slug
+      ? `/${selectedTemplate.slug}/${product.slug}?preview=true`
+      : null;
+  const canPublish = Boolean(product?.id && (product.draft_data || product.status !== "published"));
 
   const applyTemplateSchema = useCallback(
     (template: ProductTemplate) => {
@@ -691,12 +707,19 @@ export function ProductForm({ product, templates = [], categories = [], awards =
       specs: specGroups,
       affiliate_links: linksPayload,
       editorial_data: editorialData,
+      status: (product?.status as "draft" | "published" | "pending_review") ?? "draft",
+      published_at: product?.published_at ?? null,
     };
     const result = await upsertProduct(payload);
     setSaving(false);
     if (result.error) {
       setError(result.error);
       return;
+    }
+    const wasDraftOrPending =
+      product?.status === "draft" || product?.status === "pending_review";
+    if (product && wasDraftOrPending) {
+      toast.success("Draft Saved");
     }
     if (onSuccess) {
       onSuccess();
@@ -722,7 +745,40 @@ export function ProductForm({ product, templates = [], categories = [], awards =
 
       {hasTemplate && (
         <div className="sticky top-0 z-50 flex justify-between items-center bg-gray-900/95 backdrop-blur py-4 border-b border-white/10 mb-8 px-4 -mx-4 rounded-b">
-          <div />
+          <div className="flex items-center gap-3">
+            {previewUrl && (
+              <Link
+                href={previewUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-2 rounded-md border border-white/20 bg-white/5 py-2 px-4 font-sans text-sm font-medium text-hot-white transition-colors hover:bg-white/10"
+              >
+                <Eye className="h-4 w-4" />
+                Preview
+              </Link>
+            )}
+            {canPublish && (
+              <button
+                type="button"
+                disabled={publishing}
+                onClick={async () => {
+                  if (!product?.id) return;
+                  setPublishing(true);
+                  setError("");
+                  const result = await publishProductDraft(product.id);
+                  setPublishing(false);
+                  if (result.error) {
+                    setError(result.error);
+                    return;
+                  }
+                  router.refresh();
+                }}
+                className="flex items-center justify-center gap-2 rounded-md bg-green-600 px-4 py-2 font-sans text-sm font-medium text-white transition-colors hover:bg-green-500 disabled:opacity-50"
+              >
+                {publishing ? "Publishing…" : "Publish"}
+              </button>
+            )}
+          </div>
           <div className="flex gap-3">
             <button
               type="submit"

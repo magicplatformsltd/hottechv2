@@ -2,7 +2,7 @@
  * Template spec schema: grouped architecture for spec labels and key-spec marking.
  */
 
-export type SpecItemType = "text" | "variant_matrix" | "boolean" | "camera_lens" | "display_panel" | "ip_rating";
+export type SpecItemType = "text" | "number" | "variant_matrix" | "boolean" | "camera_lens" | "display_panel" | "ip_rating";
 
 export interface SpecItem {
   id: string;

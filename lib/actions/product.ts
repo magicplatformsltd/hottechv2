@@ -2,7 +2,16 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/utils/supabase/server";
-import type { Product, ProductSpecs, AffiliateLinks, EditorialData } from "@/lib/types/product";
+import type { SupabaseClient } from "@supabase/supabase-js";
+import type {
+  Product,
+  ProductSpecs,
+  AffiliateLinks,
+  EditorialData,
+  ProductDraftData,
+  ProductSpecsNested,
+} from "@/lib/types/product";
+import type { SpecGroup, SpecItem } from "@/lib/types/template";
 
 /** Build a row payload for products table from Partial<Product>, omitting undefined and handling JSONB. */
 function toProductRow(data: Partial<Product>): Record<string, unknown> {
@@ -25,7 +34,189 @@ function toProductRow(data: Partial<Product>): Record<string, unknown> {
   if (data.specs !== undefined) row.specs = data.specs ?? {};
   if (data.affiliate_links !== undefined) row.affiliate_links = data.affiliate_links ?? {};
   if (data.editorial_data !== undefined) row.editorial_data = data.editorial_data ?? {};
+  if (data.status !== undefined) row.status = data.status ?? "draft";
+  if (data.published_at !== undefined) row.published_at = data.published_at ?? null;
+  if (data.draft_data !== undefined) row.draft_data = data.draft_data ?? null;
   return row;
+}
+
+/** Build ProductDraftData from form/update payload for storing in draft_data column. */
+function buildDraftDataFromPayload(data: Partial<Product>): ProductDraftData {
+  return {
+    name: data.name ?? undefined,
+    brand: data.brand ?? undefined,
+    slug: data.slug ?? undefined,
+    template_id: data.template_id ?? undefined,
+    specs: data.specs ?? undefined,
+    editorial_data: data.editorial_data ?? undefined,
+    affiliate_links: data.affiliate_links ?? undefined,
+    hero_image: data.hero_image ?? undefined,
+    transparent_image: data.transparent_image ?? undefined,
+    seo_title: data.seo_title ?? undefined,
+    seo_description: data.seo_description ?? undefined,
+    announcement_date: data.announcement_date ?? undefined,
+    release_date: data.release_date ?? undefined,
+    discontinued_date: data.discontinued_date ?? undefined,
+    software_updates_years: data.software_updates_years ?? undefined,
+    security_updates_years: data.security_updates_years ?? undefined,
+    category_id: data.category_id ?? undefined,
+    award_id: data.award_id ?? undefined,
+  };
+}
+
+/**
+ * Normalize extracted data using the template's field types.
+ * - Numbers: coerce to number (integer).
+ * - Booleans: convert "Yes"/"No" (case-insensitive) to true/false or { value, details }.
+ * - Structured forms (camera_lens, display_panel): if AI returned a flat string, wrap in the primary key so it doesn't disappear in the UI.
+ */
+export async function applyTemplateTypes(
+  data: ProductSpecsNested,
+  templateFields: SpecGroup[]
+): Promise<ProductSpecsNested> {
+  const out: ProductSpecsNested = {};
+  for (const group of templateFields) {
+    const groupName = group.groupName?.trim() || "General";
+    const fromData = data[groupName];
+    if (!out[groupName]) out[groupName] = {};
+    for (const spec of group.specs ?? []) {
+      const specName = spec.name?.trim();
+      if (!specName) continue;
+      const type: SpecItem["type"] = (spec as SpecItem).type ?? "text";
+      let val = fromData && typeof fromData === "object" ? (fromData as Record<string, unknown>)[specName] : undefined;
+
+      if (val === undefined || val === null) continue;
+
+      if (type === "boolean") {
+        if (typeof val === "string") {
+          const lower = (val as string).toLowerCase().trim();
+          out[groupName]![specName] = {
+            value: lower === "yes" || lower === "true" || lower === "1",
+            details: "",
+          };
+        } else if (typeof val === "object" && val !== null && "value" in val) {
+          const v = val as { value?: boolean; details?: string };
+          out[groupName]![specName] = {
+            value: Boolean(v.value),
+            details: typeof v.details === "string" ? v.details : "",
+          };
+        }
+        continue;
+      }
+
+      if (type === "variant_matrix") {
+        const arr = Array.isArray(val) ? val : [];
+        out[groupName]![specName] = arr.map((x) => {
+          const o = x && typeof x === "object" ? x as Record<string, unknown> : {};
+          return {
+            value1: String(o.value1 ?? o.ram ?? "").trim(),
+            value2: String(o.value2 ?? o.storage ?? "").trim(),
+          };
+        });
+        continue;
+      }
+
+      if (type === "ip_rating") {
+        const arr = Array.isArray(val) ? val : [];
+        out[groupName]![specName] = arr.map((x) => {
+          const o = x && typeof x === "object" ? x as Record<string, unknown> : {};
+          return {
+            dust: String(o.dust ?? "X").trim(),
+            water: String(o.water ?? "X").trim(),
+          };
+        });
+        continue;
+      }
+
+      if (type === "camera_lens") {
+        if (typeof val === "string" && (val as string).trim()) {
+          out[groupName]![specName] = {
+            mp: (val as string).trim(),
+            aperture: "",
+            focalLength: "",
+            fov: "",
+            lensType: "",
+            sensorSize: "",
+            pixelSize: "",
+            autofocus: "",
+            zoom: "",
+            ois: false,
+          };
+        } else if (typeof val === "object" && val !== null && "mp" in val) {
+          const o = val as Record<string, unknown>;
+          out[groupName]![specName] = {
+            mp: String(o.mp ?? "").trim(),
+            aperture: String(o.aperture ?? "").trim(),
+            focalLength: String(o.focalLength ?? "").trim(),
+            fov: String(o.fov ?? "").trim(),
+            lensType: String(o.lensType ?? "").trim(),
+            sensorSize: String(o.sensorSize ?? "").trim(),
+            pixelSize: String(o.pixelSize ?? "").trim(),
+            autofocus: String(o.autofocus ?? "").trim(),
+            zoom: String(o.zoom ?? "").trim(),
+            ois: Boolean(o.ois),
+          };
+        }
+        continue;
+      }
+
+      if (type === "display_panel") {
+        if (typeof val === "string" && (val as string).trim()) {
+          out[groupName]![specName] = {
+            displayName: (val as string).trim(),
+            diagonalSize: "",
+            screenToBodyRatio: "",
+            panelType: "",
+            colorDepth: "",
+            resolution: "",
+            aspectRatio: "",
+            pixelDensity: "",
+            refreshRate: "",
+            pwm: "",
+            hbmBrightness: "",
+            peakBrightness: "",
+            protection: "",
+            hasDolbyVision: false,
+            hasHDR10Plus: false,
+            otherFeatures: "",
+          };
+        } else if (typeof val === "object" && val !== null && "displayName" in val) {
+          const o = val as Record<string, unknown>;
+          out[groupName]![specName] = {
+            displayName: String(o.displayName ?? "").trim(),
+            diagonalSize: String(o.diagonalSize ?? "").trim(),
+            screenToBodyRatio: String(o.screenToBodyRatio ?? "").trim(),
+            panelType: String(o.panelType ?? "").trim(),
+            colorDepth: String(o.colorDepth ?? "").trim(),
+            resolution: String(o.resolution ?? "").trim(),
+            aspectRatio: String(o.aspectRatio ?? "").trim(),
+            pixelDensity: String(o.pixelDensity ?? "").trim(),
+            refreshRate: String(o.refreshRate ?? "").trim(),
+            pwm: String(o.pwm ?? "").trim(),
+            hbmBrightness: String(o.hbmBrightness ?? "").trim(),
+            peakBrightness: String(o.peakBrightness ?? "").trim(),
+            protection: String(o.protection ?? "").trim(),
+            hasDolbyVision: Boolean(o.hasDolbyVision),
+            hasHDR10Plus: Boolean(o.hasHDR10Plus),
+            otherFeatures: String(o.otherFeatures ?? "").trim(),
+          };
+        }
+        continue;
+      }
+
+      if (type === "number") {
+        const digitsOnly = (typeof val === "string" ? val : String(val)).replace(/[^0-9]/g, "");
+        const n = digitsOnly.length > 0 ? parseInt(digitsOnly, 10) : NaN;
+        out[groupName]![specName] = !Number.isNaN(n) ? String(n) : (typeof val === "string" ? val : String(val));
+        continue;
+      }
+
+      if (type === "text" || !type) {
+        out[groupName]![specName] = typeof val === "string" ? val : String(val);
+      }
+    }
+  }
+  return out;
 }
 
 export async function getProducts(): Promise<Product[]> {
@@ -102,9 +293,33 @@ export async function upsertProduct(
   }
 
   const id = data.id?.trim();
-  const row = toProductRow(data);
 
   if (id) {
+    const current = await getProductById(id);
+    const isDraftOrPending =
+      current?.status === "draft" || current?.status === "pending_review";
+
+    if (isDraftOrPending) {
+      const draft_data = buildDraftDataFromPayload(data);
+      const row = toProductRow({ draft_data });
+      const { data: updated, error } = await client
+        .from("products")
+        .update(row)
+        .eq("id", id)
+        .select()
+        .single();
+
+      if (error) {
+        console.error("[upsertProduct] update draft_data", error);
+        return { error: error.message };
+      }
+      revalidatePath("/admin/products");
+      revalidatePath(`/admin/products/${id}`);
+      revalidatePath("/");
+      return { product: updated as Product };
+    }
+
+    const row = toProductRow(data);
     const { data: updated, error } = await client
       .from("products")
       .update(row)
@@ -128,27 +343,34 @@ export async function upsertProduct(
     return { error: "name, brand, and slug are required to create a product." };
   }
 
+  const insertPayload: Partial<Product> = {
+    name,
+    brand,
+    slug,
+    announcement_date: data.announcement_date ?? null,
+    release_date: data.release_date ?? null,
+    discontinued_date: data.discontinued_date ?? null,
+    software_updates_years: data.software_updates_years ?? null,
+    security_updates_years: data.security_updates_years ?? null,
+    hero_image: data.hero_image ?? null,
+    transparent_image: data.transparent_image ?? null,
+    template_id: data.template_id ?? null,
+    category_id: data.category_id ?? null,
+    seo_title: data.seo_title ?? null,
+    seo_description: data.seo_description ?? null,
+    award_id: data.award_id ?? null,
+    specs: (data.specs ?? {}) as ProductSpecs,
+    affiliate_links: (data.affiliate_links ?? []) as AffiliateLinks,
+    editorial_data: (data.editorial_data ?? {}) as EditorialData,
+    status: data.status ?? "draft",
+    published_at: data.published_at ?? null,
+    draft_data: data.draft_data ?? null,
+  };
+  const insertRow = toProductRow(insertPayload);
+
   const { data: created, error } = await client
     .from("products")
-    .insert({
-      name,
-      brand,
-      slug,
-      announcement_date: data.announcement_date ?? null,
-      release_date: data.release_date ?? null,
-      discontinued_date: data.discontinued_date ?? null,
-      software_updates_years: data.software_updates_years ?? null,
-      security_updates_years: data.security_updates_years ?? null,
-      hero_image: data.hero_image ?? null,
-      transparent_image: data.transparent_image ?? null,
-      template_id: data.template_id ?? null,
-      category_id: data.category_id ?? null,
-      seo_title: data.seo_title ?? null,
-      seo_description: data.seo_description ?? null,
-      specs: (data.specs ?? {}) as ProductSpecs,
-      affiliate_links: (data.affiliate_links ?? {}) as AffiliateLinks,
-      editorial_data: (data.editorial_data ?? {}) as EditorialData,
-    })
+    .insert(insertRow)
     .select()
     .single();
 
@@ -159,6 +381,204 @@ export async function upsertProduct(
   revalidatePath("/admin/products");
   revalidatePath("/");
   return { product: created as Product };
+}
+
+/** Payload for importing a product (e.g. from AI extraction). All editable fields go into draft_data; live row is minimal until approved. */
+export type ImportProductPayload = {
+  name: string;
+  brand: string;
+  slug: string;
+  template_id: string;
+  /** Optional; stored in draft_data. */
+  specs?: Product["specs"];
+  editorial_data?: EditorialData;
+  affiliate_links?: AffiliateLinks;
+  hero_image?: string | null;
+  transparent_image?: string | null;
+  seo_title?: string | null;
+  seo_description?: string | null;
+  announcement_date?: string | null;
+  release_date?: string | null;
+  discontinued_date?: string | null;
+  software_updates_years?: number | null;
+  security_updates_years?: number | null;
+  category_id?: number | null;
+  award_id?: string | null;
+};
+
+/**
+ * Import a product using a provided Supabase client (e.g. service role). Skips auth check.
+ * Use from API routes (e.g. test-extract) when there is no user session. Keeps [importProduct] logs.
+ */
+export async function importProductWithClient(
+  client: SupabaseClient,
+  incoming: ImportProductPayload
+): Promise<{ product?: Product; error?: string }> {
+  return doImportProduct(client, incoming);
+}
+
+/**
+ * Import a product (e.g. from AI extraction or CSV). Uses cookie-based client; requires authenticated user.
+ * Uses dual-state model: status 'pending_review', published_at null, incoming data in draft_data.
+ *
+ * For sessionless calls (e.g. curl to test-extract), use importProductWithClient with a service role client.
+ */
+export async function importProduct(
+  incoming: ImportProductPayload
+): Promise<{ product?: Product; error?: string }> {
+  const client = await createClient();
+  const {
+    data: { user },
+  } = await client.auth.getUser();
+  if (!user) {
+    return { error: "Unauthorized." };
+  }
+  return doImportProduct(client, incoming);
+}
+
+async function doImportProduct(
+  client: SupabaseClient,
+  incoming: ImportProductPayload
+): Promise<{ product?: Product; error?: string }> {
+  const name = (incoming.name ?? "").trim();
+  const brand = (incoming.brand ?? "").trim();
+  const slug = (incoming.slug ?? "").trim();
+  const templateId = (incoming.template_id ?? "").trim();
+  if (!name || !brand || !slug || !templateId) {
+    return { error: "name, brand, slug, and template_id are required to import a product." };
+  }
+
+  const draft_data: ProductDraftData = {
+    name,
+    brand,
+    slug,
+    template_id: templateId,
+    specs: incoming.specs ?? {},
+    editorial_data: incoming.editorial_data ?? {},
+    affiliate_links: incoming.affiliate_links ?? [],
+    hero_image: incoming.hero_image ?? null,
+    transparent_image: incoming.transparent_image ?? null,
+    seo_title: incoming.seo_title ?? null,
+    seo_description: incoming.seo_description ?? null,
+    announcement_date: incoming.announcement_date ?? null,
+    release_date: incoming.release_date ?? null,
+    discontinued_date: incoming.discontinued_date ?? null,
+    software_updates_years: incoming.software_updates_years ?? null,
+    security_updates_years: incoming.security_updates_years ?? null,
+    category_id: incoming.category_id ?? null,
+    award_id: incoming.award_id ?? null,
+  };
+
+  const payload: Partial<Product> = {
+    name,
+    brand,
+    slug,
+    template_id: templateId,
+    status: "pending_review",
+    published_at: null,
+    specs: {},
+    affiliate_links: [],
+    editorial_data: {},
+    draft_data,
+  };
+
+  const row = toProductRow(payload);
+
+  // Debug: log row keys and draft_data presence (full row can be large)
+  const rowKeys = Object.keys(row);
+  const hasDraftData = "draft_data" in row && row.draft_data != null;
+  console.log("[importProduct] insert row keys:", rowKeys.join(", "), "| draft_data present:", hasDraftData, "| status:", row.status);
+
+  const { data: created, error } = await client
+    .from("products")
+    .insert(row)
+    .select()
+    .single();
+
+  if (error) {
+    const errMsg = error?.message ?? String(error);
+    const errCode = (error as { code?: string })?.code;
+    const errDetails = (error as { details?: string })?.details;
+    console.error("[importProduct] Supabase insert FAILED:", {
+      message: errMsg,
+      code: errCode,
+      details: errDetails,
+      hint: errCode === "42501" ? "RLS/Permission Denied" : errCode === "23505" ? "Unique violation (e.g. slug)" : "Check code for schema/constraint",
+    });
+    return { error: errMsg };
+  }
+
+  if (created == null) {
+    console.error("[importProduct] insert returned no error but data is null/empty (possible RLS on SELECT after insert)");
+    return { error: "Insert succeeded but row could not be read back. Check RLS policies for SELECT." };
+  }
+
+  console.log("[importProduct] insert success, id:", (created as { id?: string })?.id);
+  revalidatePath("/admin/products");
+  revalidatePath("/");
+  return { product: created as Product };
+}
+
+/**
+ * Publish draft: merge draft_data into live columns, clear draft_data, set status to published and published_at to now.
+ * Call from the product edit page "Publish" button.
+ */
+export async function publishProductDraft(id: string): Promise<{ product?: Product; error?: string }> {
+  const client = await createClient();
+  const {
+    data: { user },
+  } = await client.auth.getUser();
+  if (!user) {
+    return { error: "Unauthorized." };
+  }
+
+  const product = await getProductById(id);
+  if (!product) {
+    return { error: "Product not found." };
+  }
+
+  const draft = product.draft_data;
+  const merged: Partial<Product> = {
+    name: (draft?.name ?? product.name) ?? "",
+    brand: (draft?.brand ?? product.brand) ?? "",
+    slug: (draft?.slug ?? product.slug) ?? "",
+    announcement_date: draft?.announcement_date ?? product.announcement_date ?? null,
+    release_date: draft?.release_date ?? product.release_date ?? null,
+    discontinued_date: draft?.discontinued_date ?? product.discontinued_date ?? null,
+    software_updates_years: draft?.software_updates_years ?? product.software_updates_years ?? null,
+    security_updates_years: draft?.security_updates_years ?? product.security_updates_years ?? null,
+    hero_image: draft?.hero_image ?? product.hero_image ?? null,
+    transparent_image: draft?.transparent_image ?? product.transparent_image ?? null,
+    template_id: draft?.template_id ?? product.template_id ?? null,
+    category_id: draft?.category_id ?? product.category_id ?? null,
+    seo_title: draft?.seo_title ?? product.seo_title ?? null,
+    seo_description: draft?.seo_description ?? product.seo_description ?? null,
+    award_id: draft?.award_id ?? product.award_id ?? null,
+    specs: (draft?.specs ?? product.specs) ?? {},
+    affiliate_links: (draft?.affiliate_links ?? product.affiliate_links) ?? [],
+    editorial_data: (draft?.editorial_data ?? product.editorial_data) ?? {},
+    status: "published",
+    published_at: new Date().toISOString(),
+    draft_data: null,
+  };
+
+  const row = toProductRow(merged);
+
+  const { data: updated, error } = await client
+    .from("products")
+    .update(row)
+    .eq("id", id)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("[publishProductDraft]", error);
+    return { error: error.message };
+  }
+  revalidatePath("/admin/products");
+  revalidatePath(`/admin/products/${id}`);
+  revalidatePath("/");
+  return { product: updated as Product };
 }
 
 export async function deleteProduct(id: string): Promise<{ error?: string }> {

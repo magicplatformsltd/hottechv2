@@ -195,6 +195,28 @@ export type EditorialData = {
   final_score?: number;
 };
 
+/** Draft payload: staging data shown in preview; applied to live columns on publish. */
+export type ProductDraftData = Partial<{
+  name: string;
+  brand: string;
+  slug: string;
+  announcement_date: string | null;
+  release_date: string | null;
+  discontinued_date: string | null;
+  software_updates_years: number | null;
+  security_updates_years: number | null;
+  hero_image: string | null;
+  transparent_image: string | null;
+  template_id: string | null;
+  category_id: number | null;
+  seo_title: string | null;
+  seo_description: string | null;
+  award_id: string | null;
+  specs: ProductSpecsInput;
+  affiliate_links: AffiliateLinks;
+  editorial_data: EditorialData;
+}>;
+
 export type Product = {
   id: string;
   name: string;
@@ -224,6 +246,12 @@ export type Product = {
   editorial_data: EditorialData;
   created_at: string;
   updated_at: string;
+  /** draft | published | pending_review. Aligned with posts. */
+  status?: string | null;
+  /** When the product is/was published; future = scheduled. */
+  published_at?: string | null;
+  /** Staging data for preview; applied to live on publish. */
+  draft_data?: ProductDraftData | null;
 };
 
 /** Junction row linking a post to a product (many-to-many). */

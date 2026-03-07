@@ -5,6 +5,7 @@ import { Pencil } from "lucide-react";
 import { format, differenceInHours, formatDistanceToNow } from "date-fns";
 import type { PostRow } from "./actions";
 import { deletePost } from "./actions";
+import { StatusBadge } from "@/components/admin/StatusBadge";
 
 function PostRowActions({ id }: { id: string }) {
   async function handleDelete() {
@@ -91,25 +92,7 @@ export function PostsTable({ posts, searchQuery }: PostsTableProps) {
             </p>
           </td>
           <td className="w-28 shrink-0 px-4 py-3 text-right align-top">
-            <span
-              className={
-                post.status === "published" &&
-                post.published_at &&
-                new Date(post.published_at) > new Date()
-                  ? "rounded-full bg-blue-500/20 px-2 py-0.5 text-xs text-blue-400"
-                  : post.status === "published"
-                    ? "rounded-full bg-green-500/20 px-2 py-0.5 text-xs text-green-400"
-                    : "rounded-full bg-amber-500/20 px-2 py-0.5 text-xs text-amber-400"
-              }
-            >
-              {post.status === "published" &&
-              post.published_at &&
-              new Date(post.published_at) > new Date()
-                ? "Scheduled"
-                : post.status === "published"
-                  ? "Published"
-                  : "Draft"}
-            </span>
+            <StatusBadge status={post.status} publishedAt={post.published_at} />
           </td>
           <td className="w-44 shrink-0 px-4 py-3 align-top text-right">
             <div className="text-gray-400">

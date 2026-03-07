@@ -139,6 +139,7 @@ function SortableSpecItem({
         aria-label="Spec type"
       >
         <option value="text">Standard Text</option>
+        <option value="number">Number (e.g. Software Updates)</option>
         <option value="variant_matrix">Variant Matrix (RAM + Storage)</option>
         <option value="boolean">Yes/No Toggle (with details)</option>
         <option value="camera_lens">Camera Lens (Structured Form)</option>

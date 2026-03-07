@@ -100,8 +100,8 @@ export function EditPostForm({
   const [slug, setSlug] = useState(post?.slug ?? "");
   const [excerpt, setExcerpt] = useState(post?.excerpt ?? "");
   const [body, setBody] = useState(post?.body ?? "");
-  const [status, setStatus] = useState<"draft" | "published">(
-    (post?.status as "draft" | "published") || "draft"
+  const [status, setStatus] = useState<"draft" | "published" | "pending_review">(
+    (post?.status as "draft" | "published" | "pending_review") || "draft"
   );
   const [publishedAt, setPublishedAt] = useState(
     toDatetimeLocalInTz(post?.published_at ?? null, siteTimezone)
@@ -260,7 +260,7 @@ export function EditPostForm({
     formData.set("excerpt", excerpt);
     formData.set("body", latestContent);
     formData.set("featured_image", featuredImageUrl ?? "");
-    formData.set("status", "draft");
+    formData.set("status", status);
     if (publishedAt) {
       const utcIso = fromDatetimeLocalToUtc(publishedAt, siteTimezone);
       if (utcIso) formData.set("published_at", utcIso);
@@ -289,7 +289,7 @@ export function EditPostForm({
       toast.error("Failed to save post");
       return;
     }
-    formData.set("status", asDraft ? "draft" : "published");
+    formData.set("status", asDraft ? status : "published");
 
     if (post?.id) {
       const saveResult = await updatePost(post.id, formData);
@@ -427,10 +427,11 @@ export function EditPostForm({
           <div className="space-y-3">
             <select
               value={status}
-              onChange={(e) => setStatus(e.target.value as "draft" | "published")}
+              onChange={(e) => setStatus(e.target.value as "draft" | "published" | "pending_review")}
               className="w-full rounded-md border border-white/10 bg-hot-black px-3 py-2 font-sans text-sm text-hot-white focus:border-hot-white/30 focus:outline-none"
             >
               <option value="draft">Draft</option>
+              <option value="pending_review">Pending Review</option>
               <option value="published">
                 {status === "published" && isScheduled ? "Scheduled" : "Published"}
               </option>
