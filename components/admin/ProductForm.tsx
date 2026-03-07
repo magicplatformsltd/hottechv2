@@ -845,88 +845,92 @@ export function ProductForm({ product, templates = [], categories = [], awards =
       )}
 
       {hasTemplate && (
-        <div className="sticky top-0 z-[100] w-full bg-gray-900/95 backdrop-blur border-b border-white/10 h-[82px] flex flex-col justify-center px-6">
-          {/* Row 1: Interactive Elements — vertically centered */}
+        <div className="sticky top-0 z-[100] w-full bg-gray-900/95 backdrop-blur border-b border-white/10 h-[82px] flex flex-col pt-4 pb-2 px-6">
+          {/* Row 1: Left = primary controls (Date, Status, Preview, Schedule/Publish); Right = Timeline, Update, Cancel */}
           <div className="flex items-center justify-between w-full min-h-[40px]">
-            <div className="flex items-center gap-4">
-              <div className="w-[200px]">
-                {product && (
-                  <input
-                    type="datetime-local"
-                    value={publishDateLocal}
-                    onChange={(e) => setPublishDateLocal(e.target.value)}
-                    className="w-full rounded-md border border-white/20 bg-white/5 px-3 py-2 font-sans text-sm text-hot-white focus:border-hot-white/50 focus:outline-none focus:ring-1 focus:ring-hot-white/30"
-                    aria-label="Publish date"
-                  />
-                )}
+            <div className="flex items-center gap-6">
+              <div className="flex items-center gap-4">
+                <div className="w-[200px]">
+                  {product && (
+                    <input
+                      type="datetime-local"
+                      value={publishDateLocal}
+                      onChange={(e) => setPublishDateLocal(e.target.value)}
+                      className="w-full rounded-md border border-white/20 bg-white/5 px-3 py-2 font-sans text-sm text-hot-white focus:border-hot-white/50 focus:outline-none focus:ring-1 focus:ring-hot-white/30"
+                      aria-label="Publish date"
+                    />
+                  )}
+                </div>
+                <div className="w-[140px]">
+                  {product && (
+                    <select
+                      value={statusDropdown}
+                      onChange={(e) => handleStatusDropdownChange(e.target.value as StatusDropdownValue)}
+                      className="w-full rounded-md border border-white/20 bg-white/5 px-3 py-2 font-sans text-sm text-hot-white focus:border-hot-white/50 focus:outline-none focus:ring-1 focus:ring-hot-white/30"
+                      aria-label="Status"
+                    >
+                      <option value="draft">Draft</option>
+                      <option value="pending_review">Pending Review</option>
+                      <option value="published">Published</option>
+                      <option value="scheduled">Scheduled</option>
+                    </select>
+                  )}
+                </div>
+                {statusDropdown === "scheduled" && product && (() => {
+                  const utc = publishDateLocal ? fromDatetimeLocalToUtc(publishDateLocal, PRODUCT_PUBLISH_TIMEZONE) : "";
+                  const isPastOrEmpty = !utc || new Date(utc) <= new Date();
+                  return isPastOrEmpty ? (
+                    <span className="font-sans text-[10px] text-amber-400 leading-tight">Set a future date for Scheduled</span>
+                  ) : null;
+                })()}
               </div>
-              <div className="w-[140px]">
-                {product && (
-                  <select
-                    value={statusDropdown}
-                    onChange={(e) => handleStatusDropdownChange(e.target.value as StatusDropdownValue)}
-                    className="w-full rounded-md border border-white/20 bg-white/5 px-3 py-2 font-sans text-sm text-hot-white focus:border-hot-white/50 focus:outline-none focus:ring-1 focus:ring-hot-white/30"
-                    aria-label="Status"
+              <div className="flex items-center gap-4">
+                {previewUrl && (
+                  <Link
+                    href={previewUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-center gap-2 rounded-md border border-white/20 bg-white/5 py-2 px-4 font-sans text-sm font-medium text-hot-white transition-colors hover:bg-white/10 shrink-0"
                   >
-                    <option value="draft">Draft</option>
-                    <option value="pending_review">Pending Review</option>
-                    <option value="published">Published</option>
-                    <option value="scheduled">Scheduled</option>
-                  </select>
+                    <Eye className="h-4 w-4" />
+                    Preview
+                  </Link>
+                )}
+                {product?.id && (
+                  <button
+                    type="button"
+                    disabled={publishing}
+                    onClick={async () => {
+                      if (!product?.id) return;
+                      setPublishing(true);
+                      setError("");
+                      const utcIso = publishDateLocal
+                        ? fromDatetimeLocalToUtc(publishDateLocal, PRODUCT_PUBLISH_TIMEZONE)
+                        : undefined;
+                      const result = await publishProductDraft(product.id, utcIso || undefined);
+                      setPublishing(false);
+                      if (result.error) {
+                        setError(result.error);
+                        return;
+                      }
+                      if (isScheduled && utcIso) {
+                        toast.success(
+                          `Scheduled for ${formatInTimeZone(new Date(utcIso), PRODUCT_PUBLISH_TIMEZONE, "MMM d, yyyy 'at' h:mm a zzz")}`
+                        );
+                      } else {
+                        toast.success("Published");
+                      }
+                      router.refresh();
+                    }}
+                    className="flex items-center justify-center gap-2 rounded-md bg-green-600 px-4 py-2 font-sans text-sm font-medium text-white transition-colors hover:bg-green-500 disabled:opacity-50 shrink-0"
+                  >
+                    {publishing ? (isScheduled ? "Scheduling…" : "Publishing…") : isScheduled ? "Schedule" : "Publish"}
+                  </button>
                 )}
               </div>
-              {statusDropdown === "scheduled" && product && (() => {
-                const utc = publishDateLocal ? fromDatetimeLocalToUtc(publishDateLocal, PRODUCT_PUBLISH_TIMEZONE) : "";
-                const isPastOrEmpty = !utc || new Date(utc) <= new Date();
-                return isPastOrEmpty ? (
-                  <span className="font-sans text-[10px] text-amber-400 leading-tight">Set a future date for Scheduled</span>
-                ) : null;
-              })()}
             </div>
 
             <div className="flex items-center gap-3">
-              {previewUrl && (
-                <Link
-                  href={previewUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center justify-center gap-2 rounded-md border border-white/20 bg-white/5 py-2 px-4 font-sans text-sm font-medium text-hot-white transition-colors hover:bg-white/10"
-                >
-                  <Eye className="h-4 w-4" />
-                  Preview
-                </Link>
-              )}
-              {product?.id && (
-                <button
-                  type="button"
-                  disabled={publishing}
-                  onClick={async () => {
-                    if (!product?.id) return;
-                    setPublishing(true);
-                    setError("");
-                    const utcIso = publishDateLocal
-                      ? fromDatetimeLocalToUtc(publishDateLocal, PRODUCT_PUBLISH_TIMEZONE)
-                      : undefined;
-                    const result = await publishProductDraft(product.id, utcIso || undefined);
-                    setPublishing(false);
-                    if (result.error) {
-                      setError(result.error);
-                      return;
-                    }
-                    if (isScheduled && utcIso) {
-                      toast.success(
-                        `Scheduled for ${formatInTimeZone(new Date(utcIso), PRODUCT_PUBLISH_TIMEZONE, "MMM d, yyyy 'at' h:mm a zzz")}`
-                      );
-                    } else {
-                      toast.success("Published");
-                    }
-                    router.refresh();
-                  }}
-                  className="flex items-center justify-center gap-2 rounded-md bg-green-600 px-4 py-2 font-sans text-sm font-medium text-white transition-colors hover:bg-green-500 disabled:opacity-50 shrink-0"
-                >
-                  {publishing ? (isScheduled ? "Scheduling…" : "Publishing…") : isScheduled ? "Schedule" : "Publish"}
-                </button>
-              )}
               {product && (
                 <div className="hidden sm:flex flex-col items-end gap-0.5 mr-2 shrink-0 min-w-[160px]">
                   <div className="flex items-center gap-1.5 font-sans text-xs text-gray-400">
