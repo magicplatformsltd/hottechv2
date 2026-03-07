@@ -6,6 +6,7 @@ import { format } from "date-fns";
 import { ArrowLeft } from "lucide-react";
 import { getTemplateBySlug, getTemplateById } from "@/lib/actions/template";
 import { getProductBySlug, getProductsByTemplateId } from "@/lib/actions/product";
+import { getAwardById } from "@/lib/actions/award";
 import {
   getPostBySlug,
   getPostByPrimaryProductAndType,
@@ -18,7 +19,8 @@ import {
 import { constructMetadata } from "@/lib/seo";
 import { JsonLd } from "@/components/seo/JsonLd";
 import { ProductSpecsTable } from "@/components/public/ProductSpecsTable";
-import { ProductCard } from "@/components/ui/ProductCard";
+import { AwardBadge } from "@/components/public/AwardBadge";
+import { ProductCarousel } from "@/components/ui/ProductCarousel";
 import { PostBody } from "@/components/posts/PostBody";
 import { ViewTracker } from "@/components/analytics/ViewTracker";
 import { getBaseUrl } from "@/lib/url";
@@ -27,6 +29,49 @@ import { getSpecsForSchema } from "@/lib/format-specs";
 import { getTemplateSchemaAsGroups } from "@/lib/types/template";
 import { isPublished, isPreviewMode, getProductForDisplay } from "@/lib/content-helpers";
 import { getIsAdmin } from "@/lib/auth";
+import { getCurrencySymbol } from "@/lib/constants/currencies";
+
+type AffiliateLinkDisplay = { retailer: string; url: string; price_amount?: string; price_currency?: string };
+
+function normalizeAffiliateLinks(links: import("@/lib/types/product").AffiliateLinks | null | undefined): AffiliateLinkDisplay[] {
+  if (!links) return [];
+  if (Array.isArray(links)) {
+    return links
+      .filter((item) => item && typeof item === "object" && "retailer" in item && "url" in item)
+      .map((item) => {
+        const a = item as { retailer: string; url: string; price_amount?: string; price_currency?: string };
+        return {
+          retailer: String(a.retailer),
+          url: String(a.url),
+          price_amount: typeof a.price_amount === "string" ? a.price_amount : undefined,
+          price_currency: typeof a.price_currency === "string" ? a.price_currency : undefined,
+        };
+      })
+      .filter((x) => x.retailer || x.url);
+  }
+  return Object.entries(links).map(([retailer, url]) => ({
+    retailer,
+    url: typeof url === "string" ? url : "",
+  }));
+}
+
+function getAffiliateButtonLabel(link: AffiliateLinkDisplay): string {
+  const amount = link.price_amount?.trim();
+  const code = link.price_currency?.trim();
+  const symbol = getCurrencySymbol(code);
+  const parts: string[] = [];
+  if (amount) parts.push(`${symbol}${amount}`);
+  if (link.retailer) parts.push(parts.length ? ` at ${link.retailer}` : `Buy at ${link.retailer}`);
+  return parts.length ? parts.join("") : `Buy at ${link.retailer || "retailer"}`;
+}
+
+function getRetailerButtonClass(retailer: string, isPrimary: boolean): string {
+  const r = retailer.toLowerCase();
+  if (isPrimary && (r.includes("amazon") || r === "amazon"))
+    return "rounded-full px-6 py-3 font-bold bg-amber-500 text-gray-900 hover:bg-amber-400 transition-colors";
+  if (isPrimary) return "rounded-full px-6 py-3 font-bold bg-white text-black hover:bg-gray-200 transition-colors";
+  return "rounded-full px-4 py-2 text-sm font-medium border border-white/20 bg-white/5 text-hot-white hover:bg-white/10 transition-colors";
+}
 
 type PageProps = {
   params: Promise<{ vertical: string; slug?: string[] }>;
@@ -205,24 +250,13 @@ export default async function VerticalPage({ params, searchParams: searchParamsP
         <p className="text-gray-400 font-sans text-lg mb-10">Browse devices and latest news.</p>
 
         {r.products.filter((p) => isPublished(p)).length > 0 && (
-          <section className="mb-12">
-            <h2 className="text-xl font-semibold text-hot-white mb-4">Featured</h2>
-            <ul className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-8 items-start">
-              {r.products
-                .filter((p) => isPublished(p))
-                .slice(0, 4)
-                .map((p) => (
-                  <li key={p.id} className="w-full min-w-0">
-                    <ProductCard
-                      product={p}
-                      showRating
-                      size="md"
-                      linkPrefix={vertical}
-                    />
-                  </li>
-                ))}
-            </ul>
-          </section>
+          <ProductCarousel
+            products={r.products.filter((p) => isPublished(p)).slice(0, 15)}
+            title="Featured"
+            linkPrefix={vertical}
+            showRating
+            className="mb-12"
+          />
         )}
 
         {r.products.filter((p) => isPublished(p)).length > 0 && (
@@ -281,6 +315,17 @@ export default async function VerticalPage({ params, searchParams: searchParamsP
         const specsForSchema = schema.length > 0 ? getSpecsForSchema(product.specs, schema) : {};
         const productSchema = generateProductSchema(product, { specsForSchema });
         const imageUrl = product.transparent_image ?? product.hero_image;
+        const award = product.award_id ? await getAwardById(product.award_id) : null;
+        const glowColor = (product as { primary_color?: string }).primary_color?.trim() || "rgb(59 130 246)";
+        const pros = product.editorial_data?.pros ?? [];
+        const cons = product.editorial_data?.cons ?? [];
+        const productNameDisplay =
+          product.name.toLowerCase().startsWith((product.brand || "").toLowerCase())
+            ? product.name
+            : `${product.brand || ""} ${product.name}`.trim();
+        const affiliateLinks = normalizeAffiliateLinks(product.affiliate_links);
+        const reviewHrefFallback = `/${vertical}/${product.slug ?? product.id}/review`;
+
         return (
           <>
             {showDraft && (
@@ -293,30 +338,109 @@ export default async function VerticalPage({ params, searchParams: searchParamsP
               <Link href="/" className="mb-8 inline-flex items-center gap-1.5 font-sans text-sm text-gray-400 transition-colors hover:text-hot-white">
                 <ArrowLeft className="h-4 w-4" /> Back to Home
               </Link>
-              <header className="mb-8">
-                <h1 className="font-serif text-4xl md:text-5xl font-bold text-hot-white mb-2">
-                  {product.brand} {product.name}
-                </h1>
-                {typeof product.editorial_data?.final_score === "number" && (
-                  <div className="inline-flex items-center gap-2 rounded-lg bg-amber-500/20 px-3 py-1.5 text-sm font-medium text-amber-200">
-                    Editor&apos;s Rating: {product.editorial_data.final_score}/10
+
+              <h1 className="font-serif text-4xl md:text-5xl font-bold text-hot-white mb-8">
+                {productNameDisplay}
+              </h1>
+
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start pt-8 pb-16">
+                <div className="lg:col-span-5 sticky top-24">
+                  <div className="relative aspect-[3/4] max-h-[480px] rounded-xl border border-white/10 bg-gray-900/50 overflow-hidden">
+                    <div
+                      className="absolute inset-0 opacity-20"
+                      style={{
+                        background: `radial-gradient(ellipse 85% 85% at 50% 38%, ${glowColor}, transparent 68%)`,
+                      }}
+                      aria-hidden
+                    />
+                    {imageUrl ? (
+                      <div className="absolute inset-0 flex items-center justify-center p-6">
+                        <Image src={imageUrl} alt={product.name} width={320} height={427} className="relative z-10 w-full h-full object-contain" priority sizes="(max-width: 1024px) 100vw, 50vw" />
+                      </div>
+                    ) : null}
                   </div>
-                )}
-              </header>
-              {imageUrl && (
-                <div className="relative aspect-square max-w-sm mx-auto mb-10">
-                  <Image src={imageUrl} alt={product.name} fill className="object-contain" priority sizes="384px" />
                 </div>
-              )}
+
+                <div className="lg:col-span-7">
+                  <div className="flex flex-wrap justify-between items-start gap-8">
+                    <div className="max-w-[75%]">
+                      <div className="inline-block px-3 py-1 bg-white/10 border border-white/10 rounded-full text-xs font-bold tracking-widest uppercase text-gray-300 mb-4">
+                        The Verdict
+                      </div>
+                      {product.editorial_data?.bottom_line && (
+                        <p className="text-base md:text-lg text-gray-300 leading-relaxed italic border-l-4 border-white/20 pl-6">
+                          {product.editorial_data.bottom_line}
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex flex-col items-center gap-3 shrink-0">
+                      {award && (
+                        <div className="w-20 h-20 flex items-center justify-center">
+                          <AwardBadge award={award} scale={80 / 240} className="shrink-0" />
+                        </div>
+                      )}
+                      {typeof product.editorial_data?.final_score === "number" && (
+                        <div className="w-12 h-12 flex items-center justify-center rounded-full border border-white/30 bg-white/20 text-xl font-bold text-hot-white">
+                          {product.editorial_data.final_score}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {(pros.length > 0 || cons.length > 0) && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-10">
+                      {pros.length > 0 && (
+                        <div className="rounded-xl border border-green-500/20 bg-green-900/10 p-6">
+                          <h3 className="font-sans font-semibold text-green-400 mb-3">Pros</h3>
+                          <ul className="space-y-2">
+                            {pros.map((item, i) => (
+                              <li key={i} className="flex items-start gap-2 font-sans text-sm text-gray-300">
+                                <span className="text-green-400 shrink-0 mt-0.5" aria-hidden>+</span>
+                                <span>{item}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {cons.length > 0 && (
+                        <div className="rounded-xl border border-red-500/20 bg-red-900/10 p-6">
+                          <h3 className="font-sans font-semibold text-red-400 mb-3">Cons</h3>
+                          <ul className="space-y-2">
+                            {cons.map((item, i) => (
+                              <li key={i} className="flex items-start gap-2 font-sans text-sm text-gray-300">
+                                <span className="text-red-400 shrink-0 mt-0.5" aria-hidden>−</span>
+                                <span>{item}</span>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap items-center gap-4 mt-8">
+                    <Link
+                      href={reviewHrefFallback}
+                      className="rounded-full px-6 py-3 bg-white text-black font-bold hover:bg-gray-200 transition-colors"
+                    >
+                      Read Full Review
+                    </Link>
+                    {affiliateLinks.map((link, i) => (
+                      <a
+                        key={link.retailer}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className={getRetailerButtonClass(link.retailer, i === 0)}
+                      >
+                        {getAffiliateButtonLabel(link)}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
               <ProductSpecsTable product={product} template={fallback.template} className="mb-10" />
-              {fallback.reviewPost && (
-                <section className="mt-10">
-                  <h2 className="text-xl font-semibold text-hot-white mb-4">Full Review</h2>
-                  <Link href={`/${vertical}/${product.slug}/review`} className="inline-flex items-center rounded-md border border-white/20 bg-white/5 px-4 py-2 text-sm font-medium text-hot-white hover:bg-white/10">
-                    Read Full Editorial Review
-                  </Link>
-                </section>
-              )}
             </div>
           </>
         );
@@ -473,6 +597,17 @@ export default async function VerticalPage({ params, searchParams: searchParamsP
     const specsForSchema = schema.length > 0 ? getSpecsForSchema(product.specs, schema) : {};
     const productSchema = generateProductSchema(product, { specsForSchema });
     const imageUrl = product.transparent_image ?? product.hero_image;
+    const award = product.award_id ? await getAwardById(product.award_id) : null;
+    const glowColor = (product as { primary_color?: string }).primary_color?.trim() || "rgb(59 130 246)";
+    const pros = product.editorial_data?.pros ?? [];
+    const cons = product.editorial_data?.cons ?? [];
+    const productNameDisplay =
+      product.name.toLowerCase().startsWith((product.brand || "").toLowerCase())
+        ? product.name
+        : `${product.brand || ""} ${product.name}`.trim();
+    const affiliateLinks = normalizeAffiliateLinks(product.affiliate_links);
+    const reviewHref = `/${vertical}/${product.slug ?? product.id}/review`;
+
     return (
       <>
         {showDraft && (
@@ -489,40 +624,119 @@ export default async function VerticalPage({ params, searchParams: searchParamsP
             <ArrowLeft className="h-4 w-4" />
             Back to {r.template?.name ?? vertical}
           </Link>
-          <header className="mb-8">
-            <h1 className="font-serif text-4xl md:text-5xl font-bold text-hot-white mb-2">
-              {product.brand} {product.name}
-            </h1>
-            {typeof product.editorial_data?.final_score === "number" && (
-              <div className="inline-flex items-center gap-2 rounded-lg bg-amber-500/20 px-3 py-1.5 text-sm font-medium text-amber-200">
-                Editor&apos;s Rating: {product.editorial_data.final_score}/10
+
+          <h1 className="font-serif text-4xl md:text-5xl font-bold text-hot-white mb-8">
+            {productNameDisplay}
+          </h1>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start pt-8 pb-16">
+            {/* Left: Hardware image + glow */}
+            <div className="lg:col-span-5 sticky top-24">
+              <div className="relative aspect-[3/4] max-h-[480px] rounded-xl border border-white/10 bg-gray-900/50 overflow-hidden">
+                <div
+                  className="absolute inset-0 opacity-20"
+                  style={{
+                    background: `radial-gradient(ellipse 85% 85% at 50% 38%, ${glowColor}, transparent 68%)`,
+                  }}
+                  aria-hidden
+                />
+                {imageUrl ? (
+                  <div className="absolute inset-0 flex items-center justify-center p-6">
+                    <Image
+                      src={imageUrl}
+                      alt={product.name}
+                      width={320}
+                      height={427}
+                      className="relative z-10 w-full h-full object-contain"
+                      priority
+                      sizes="(max-width: 1024px) 100vw, 50vw"
+                    />
+                  </div>
+                ) : null}
               </div>
-            )}
-          </header>
-          {imageUrl && (
-            <div className="relative aspect-square max-w-sm mx-auto mb-10">
-              <Image
-                src={imageUrl}
-                alt={product.name}
-                fill
-                className="object-contain"
-                priority
-                sizes="384px"
-              />
             </div>
-          )}
+
+            {/* Right: Verdict — 80/20 split + pros/cons + action row */}
+            <div className="lg:col-span-7">
+              <div className="flex flex-wrap justify-between items-start gap-8">
+                <div className="max-w-[75%]">
+                  <div className="inline-block px-3 py-1 bg-white/10 border border-white/10 rounded-full text-xs font-bold tracking-widest uppercase text-gray-300 mb-4">
+                    The Verdict
+                  </div>
+                  {product.editorial_data?.bottom_line && (
+                    <p className="text-base md:text-lg text-gray-300 leading-relaxed italic border-l-4 border-white/20 pl-6">
+                      {product.editorial_data.bottom_line}
+                    </p>
+                  )}
+                </div>
+                <div className="flex flex-col items-center gap-3 shrink-0">
+                  {award && (
+                    <div className="w-20 h-20 flex items-center justify-center">
+                      <AwardBadge award={award} scale={80 / 240} className="shrink-0" />
+                    </div>
+                  )}
+                  {typeof product.editorial_data?.final_score === "number" && (
+                    <div className="w-12 h-12 flex items-center justify-center rounded-full border border-white/30 bg-white/20 text-xl font-bold text-hot-white">
+                      {product.editorial_data.final_score}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {(pros.length > 0 || cons.length > 0) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-10">
+                  {pros.length > 0 && (
+                    <div className="rounded-xl border border-green-500/20 bg-green-900/10 p-6">
+                      <h3 className="font-sans font-semibold text-green-400 mb-3">Pros</h3>
+                      <ul className="space-y-2">
+                        {pros.map((item, i) => (
+                          <li key={i} className="flex items-start gap-2 font-sans text-sm text-gray-300">
+                            <span className="text-green-400 shrink-0 mt-0.5" aria-hidden>+</span>
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {cons.length > 0 && (
+                    <div className="rounded-xl border border-red-500/20 bg-red-900/10 p-6">
+                      <h3 className="font-sans font-semibold text-red-400 mb-3">Cons</h3>
+                      <ul className="space-y-2">
+                        {cons.map((item, i) => (
+                          <li key={i} className="flex items-start gap-2 font-sans text-sm text-gray-300">
+                            <span className="text-red-400 shrink-0 mt-0.5" aria-hidden>−</span>
+                            <span>{item}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex flex-wrap items-center gap-4 mt-8">
+                <Link
+                  href={reviewHref}
+                  className="rounded-full px-6 py-3 bg-white text-black font-bold hover:bg-gray-200 transition-colors"
+                >
+                  Read Full Review
+                </Link>
+                {affiliateLinks.map((link, i) => (
+                  <a
+                    key={link.retailer}
+                    href={link.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={getRetailerButtonClass(link.retailer, i === 0)}
+                  >
+                    {getAffiliateButtonLabel(link)}
+                  </a>
+                ))}
+              </div>
+            </div>
+          </div>
+
           <ProductSpecsTable product={product} template={r.template} className="mb-10" />
-          {r.reviewPost && (
-            <section className="mt-10">
-              <h2 className="text-xl font-semibold text-hot-white mb-4">Full Review</h2>
-              <Link
-                href={`/${vertical}/${slugPart}/review`}
-                className="inline-flex items-center rounded-md border border-white/20 bg-white/5 px-4 py-2 text-sm font-medium text-hot-white hover:bg-white/10"
-              >
-                Read Full Editorial Review
-              </Link>
-            </section>
-          )}
         </div>
       </>
     );

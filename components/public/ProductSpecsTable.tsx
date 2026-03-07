@@ -9,6 +9,26 @@ function formatDate(isoDate: string | null | undefined): string {
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
 }
 
+/** Parse multi-line "Label: value" strings (e.g. Display/Camera) into sub-rows. Splits at first colon only to preserve ratios like 19.5:9. */
+function parseComplexValue(
+  value: unknown
+): { subLabel: string; subValue: string }[] | null {
+  if (typeof value !== "string" || !value.includes("\n") || !value.includes(":"))
+    return null;
+  const lines = value.split("\n").map((l) => l.trim()).filter(Boolean);
+  const parsed: { subLabel: string; subValue: string }[] = [];
+  for (const line of lines) {
+    const idx = line.indexOf(":");
+    if (idx >= 0) {
+      parsed.push({
+        subLabel: line.slice(0, idx).trim(),
+        subValue: line.slice(idx + 1).trim(),
+      });
+    }
+  }
+  return parsed.length > 0 ? parsed : null;
+}
+
 type ProductSpecsTableProps = {
   product: Product;
   template: ProductTemplate | null;
@@ -35,75 +55,99 @@ export function ProductSpecsTable({ product, template, className = "" }: Product
       {groups.length === 0 && !hasDates ? (
         <div className="p-4 text-sm text-gray-500">No spec schema. Assign a template to this product.</div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-0">
+        <div className="flex flex-col w-full">
           {groups.map((g) => (
-            <div key={g.groupName} className="border-b border-r border-white/5 last:border-r-0">
-              <div className="bg-white/10 p-3 font-bold text-sm uppercase tracking-wider text-gray-200 dark:text-gray-300">
+            <div key={g.groupName}>
+              <div className="bg-white/5 border-y border-white/10 px-4 py-3 text-sm font-bold uppercase tracking-wider text-hot-white mt-8 first:mt-0">
                 {g.groupName}
               </div>
-              <div className="divide-y divide-white/5">
-                {g.rows.map((row) => (
-                  <div key={row.rowLabel} className="flex border-white/5">
-                    <div className="w-1/3 shrink-0 font-medium text-gray-400 p-3 text-sm capitalize">
+              {g.rows.map((row) => {
+                const complex = parseComplexValue(row.display);
+                if (complex && complex.length > 0) {
+                  return (
+                    <div key={row.rowLabel} className="contents">
+                      <div className="col-span-1 md:col-span-12 px-4 py-2 bg-white/[0.03] border-b border-white/5 text-xs font-bold text-gray-300 uppercase tracking-wider">
+                        {row.rowLabel}
+                      </div>
+                      {complex.map((item, i) => (
+                        <div
+                          key={`${row.rowLabel}-${i}-${item.subLabel}`}
+                          className="grid grid-cols-1 md:grid-cols-12 gap-4 px-4 py-3 border-b border-white/5 hover:bg-white/[0.02] transition-colors"
+                        >
+                          <div className="md:col-span-3 text-sm text-gray-400 font-medium pl-4">
+                            {item.subLabel}
+                          </div>
+                          <div className="md:col-span-9 text-sm text-gray-200 leading-relaxed">
+                            {item.subValue}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                }
+                return (
+                  <div
+                    key={row.rowLabel}
+                    className="grid grid-cols-1 md:grid-cols-12 gap-4 px-4 py-3 border-b border-white/5 hover:bg-white/[0.02] transition-colors"
+                  >
+                    <div className="md:col-span-3 text-sm text-gray-400 font-medium capitalize">
                       {row.rowLabel}
                     </div>
                     <div
-                      className={`w-2/3 text-gray-900 dark:text-white p-3 text-sm ${row.isDisplayPanel ? "whitespace-pre-line" : ""}`}
+                      className={`md:col-span-9 text-sm text-gray-200 dark:text-gray-200 leading-relaxed ${row.isDisplayPanel || (typeof row.display === "string" && row.display.includes("\n")) ? "whitespace-pre-line" : ""}`}
                     >
                       {row.display}
                     </div>
                   </div>
-                ))}
-              </div>
+                );
+              })}
             </div>
           ))}
           {hasDates && (
-            <div className="border-b border-r border-white/5 md:col-span-2 lg:col-span-1 last:border-r-0">
-              <div className="bg-white/10 p-3 font-bold text-sm uppercase tracking-wider text-gray-200 dark:text-gray-300">
+            <div className="mt-8">
+              <div className="bg-white/5 border-y border-white/10 px-4 py-3 text-sm font-bold uppercase tracking-wider text-hot-white">
                 Key dates &amp; support
               </div>
-              <div className="divide-y divide-white/5">
-                {product.announcement_date && (
-                  <div className="flex">
-                    <div className="w-1/3 shrink-0 font-medium text-gray-400 p-3 text-sm">Announced</div>
-                    <div className="w-2/3 text-gray-900 dark:text-white p-3 text-sm">
-                      {formatDate(product.announcement_date)}
-                    </div>
+              {product.announcement_date && (
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 px-4 py-3 border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                  <div className="md:col-span-3 text-sm text-gray-400 font-medium">Announced</div>
+                  <div className="md:col-span-9 text-sm text-gray-200 leading-relaxed">
+                    {formatDate(product.announcement_date)}
                   </div>
-                )}
-                {product.release_date && (
-                  <div className="flex">
-                    <div className="w-1/3 shrink-0 font-medium text-gray-400 p-3 text-sm">Released</div>
-                    <div className="w-2/3 text-gray-900 dark:text-white p-3 text-sm">
-                      {formatDate(product.release_date)}
-                    </div>
+                </div>
+              )}
+              {product.release_date && (
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 px-4 py-3 border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                  <div className="md:col-span-3 text-sm text-gray-400 font-medium">Released</div>
+                  <div className="md:col-span-9 text-sm text-gray-200 leading-relaxed">
+                    {formatDate(product.release_date)}
                   </div>
-                )}
-                {product.discontinued_date && (
-                  <div className="flex">
-                    <div className="w-1/3 shrink-0 font-medium text-gray-400 p-3 text-sm">Discontinued</div>
-                    <div className="w-2/3 text-gray-900 dark:text-white p-3 text-sm">
-                      {formatDate(product.discontinued_date)}
-                    </div>
+                </div>
+              )}
+              {product.discontinued_date && (
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 px-4 py-3 border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                  <div className="md:col-span-3 text-sm text-gray-400 font-medium">Discontinued</div>
+                  <div className="md:col-span-9 text-sm text-gray-200 leading-relaxed">
+                    {formatDate(product.discontinued_date)}
                   </div>
-                )}
-                {product.software_updates_years != null && (
-                  <div className="flex">
-                    <div className="w-1/3 shrink-0 font-medium text-gray-400 p-3 text-sm">Software updates</div>
-                    <div className="w-2/3 text-gray-900 dark:text-white p-3 text-sm">
-                      {product.software_updates_years} years
-                    </div>
+                </div>
+              )}
+              {product.software_updates_years != null && (
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 px-4 py-3 border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                  <div className="md:col-span-3 text-sm text-gray-400 font-medium">Software updates</div>
+                  <div className="md:col-span-9 text-sm text-gray-200 leading-relaxed">
+                    {product.software_updates_years} years
                   </div>
-                )}
-                {product.security_updates_years != null && (
-                  <div className="flex">
-                    <div className="w-1/3 shrink-0 font-medium text-gray-400 p-3 text-sm">Security updates</div>
-                    <div className="w-2/3 text-gray-900 dark:text-white p-3 text-sm">
-                      {product.security_updates_years} years
-                    </div>
+                </div>
+              )}
+              {product.security_updates_years != null && (
+                <div className="grid grid-cols-1 md:grid-cols-12 gap-4 px-4 py-3 border-b border-white/5 hover:bg-white/[0.02] transition-colors">
+                  <div className="md:col-span-3 text-sm text-gray-400 font-medium">Security updates</div>
+                  <div className="md:col-span-9 text-sm text-gray-200 leading-relaxed">
+                    {product.security_updates_years} years
                   </div>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )}
         </div>

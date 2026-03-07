@@ -101,8 +101,8 @@ export function ProductCard({
       {/* Info overlay — name/brand left; score circle bottom-right */}
       <div className="absolute bottom-0 left-0 right-0 z-20 w-full p-4 bg-gradient-to-t from-black/80 to-transparent backdrop-blur-sm">
         <div className="flex justify-between items-end gap-2">
-          <div className="min-w-0 max-w-[70%]">
-            <p className="font-sans font-bold text-hot-white truncate">
+          <div className="min-w-0 max-w-[75%] min-h-[2.5rem] flex flex-col justify-end">
+            <p className="font-sans text-base font-bold text-hot-white leading-tight line-clamp-2">
               {product.name}
             </p>
             {product.brand && (
