@@ -2,7 +2,7 @@
  * Template spec schema: grouped architecture for spec labels and key-spec marking.
  */
 
-export type SpecItemType = "text" | "variant_matrix" | "boolean";
+export type SpecItemType = "text" | "variant_matrix" | "boolean" | "camera_lens";
 
 export interface SpecItem {
   id: string;
@@ -10,6 +10,8 @@ export interface SpecItem {
   isKey: boolean;
   /** Default 'text' when undefined (backward compatibility). */
   type?: SpecItemType;
+  /** For variant_matrix: custom column labels and optional hide-labels on front-end. */
+  matrixConfig?: { col1Label: string; col2Label: string; hideLabelsPublicly?: boolean };
 }
 
 export interface SpecGroup {

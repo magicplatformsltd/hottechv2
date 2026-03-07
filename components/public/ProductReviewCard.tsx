@@ -6,12 +6,12 @@ import { Plus, Minus, CheckCircle, XCircle } from "lucide-react";
 import { getProductById } from "@/lib/actions/product";
 import { getTemplateById } from "@/lib/actions/template";
 import { getAwardById } from "@/lib/actions/award";
-import type { Product, ProductSpecsInput, VariantMatrixEntry, BooleanWithDetails } from "@/lib/types/product";
+import type { Product, ProductSpecsInput, VariantMatrixEntry, BooleanWithDetails, CameraLensData } from "@/lib/types/product";
 import { getFlattenedSpecs, getRawSpecValue } from "@/lib/types/product";
 import type { ProductTemplate } from "@/lib/types/product";
 import type { ProductBoxBlockData } from "@/lib/types/post";
 import { getTemplateSchemaAsGroups } from "@/lib/types/template";
-import type { SpecGroup } from "@/lib/types/template";
+import type { SpecGroup, SpecItem } from "@/lib/types/template";
 import { getCurrencySymbol } from "@/lib/constants/currencies";
 import { AwardBadge } from "./AwardBadge";
 
@@ -26,6 +26,14 @@ type AffiliateLinkDisplay = {
   price_amount?: string;
   price_currency?: string;
 };
+
+/** Format ISO date string for display; returns empty string if missing or invalid. */
+function formatDate(isoDate: string | null | undefined): string {
+  if (!isoDate || typeof isoDate !== "string") return "";
+  const d = new Date(isoDate);
+  if (Number.isNaN(d.getTime())) return "";
+  return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+}
 
 function normalizeAffiliateLinks(product: Product | null): AffiliateLinkDisplay[] {
   if (!product?.affiliate_links) return [];
@@ -94,12 +102,18 @@ function normalizeCustomList(raw: string | string[] | null | undefined): string[
   }
 }
 
-/** Format variant matrix array for Key Specs: RAM and Storage on separate lines. */
-function formatVariantMatrixForCombiner(arr: VariantMatrixEntry[]): string {
-  const rams = [...new Set(arr.map((x) => (x.ram ?? "").trim()).filter(Boolean))];
-  const storages = [...new Set(arr.map((x) => (x.storage ?? "").trim()).filter(Boolean))];
-  const line1 = rams.length > 0 ? `${rams.join("/")} RAM` : "";
-  const line2 = storages.length > 0 ? `${storages.join("/")} Storage` : "";
+/** Format variant matrix for Key Specs using template labels; two lines when both columns present. Respects hideLabelsPublicly. */
+function formatVariantMatrixForCombiner(
+  arr: VariantMatrixEntry[],
+  templateSpec?: Pick<SpecItem, "matrixConfig">
+): string {
+  const hideLabels = templateSpec?.matrixConfig?.hideLabelsPublicly === true;
+  const label1 = hideLabels ? "" : (templateSpec?.matrixConfig?.col1Label ?? "");
+  const label2 = hideLabels ? "" : (templateSpec?.matrixConfig?.col2Label ?? "");
+  const parts1 = [...new Set(arr.map((x) => (x.value1 ?? "").trim()).filter(Boolean))];
+  const parts2 = [...new Set(arr.map((x) => (x.value2 ?? "").trim()).filter(Boolean))];
+  const line1 = parts1.length > 0 ? (hideLabels ? parts1.join("/") : `${parts1.join("/")} ${label1}`.trim()) : "";
+  const line2 = parts2.length > 0 ? (hideLabels ? parts2.join("/") : `${parts2.join("/")} ${label2}`.trim()) : "";
   if (line1 && line2) return `${line1}\n${line2}`;
   return line1 || line2 || "";
 }
@@ -109,6 +123,26 @@ function formatBooleanWithDetails(obj: BooleanWithDetails): string {
   if (obj.value === false) return "No";
   const d = (obj.details ?? "").trim();
   return d ? `Yes (${d})` : "Yes";
+}
+
+/** Format camera lens data as GSMArena-style string: "50MP, f/1.8, 24mm (Wide), 1/1.28\", 1.22µm, PDAF, 2x, OIS" */
+function formatCameraLensForDisplay(item: CameraLensData): string {
+  const focalAndType =
+    (item.focalLength ?? "").trim() && (item.lensType ?? "").trim()
+      ? `${(item.focalLength ?? "").trim()} (${(item.lensType ?? "").trim()})`
+      : (item.focalLength ?? "").trim() || (item.lensType ?? "").trim();
+  const parts = [
+    (item.mp ?? "").trim(),
+    (item.aperture ?? "").trim(),
+    focalAndType,
+    (item.fov ?? "").trim(),
+    (item.sensorSize ?? "").trim(),
+    (item.pixelSize ?? "").trim(),
+    (item.autofocus ?? "").trim(),
+    (item.zoom ?? "").trim(),
+  ].filter(Boolean);
+  if (item.ois === true) parts.push("OIS");
+  return parts.join(", ") || "";
 }
 
 /** Combined key specs per group: { label: groupName, value: space-joined key spec values }. Handles variant_matrix. */
@@ -124,9 +158,11 @@ function getCombinedKeySpecs(
       .map((s) => {
         const raw = getRawSpecValue(productSpecs, groupName, s.name ?? "");
         if (typeof raw === "string") return raw.trim();
-        if (Array.isArray(raw) && raw.length > 0) return formatVariantMatrixForCombiner(raw as VariantMatrixEntry[]);
+        if (Array.isArray(raw) && raw.length > 0) return formatVariantMatrixForCombiner(raw as VariantMatrixEntry[], s);
         if (raw && typeof raw === "object" && !Array.isArray(raw) && "value" in raw)
           return formatBooleanWithDetails(raw as BooleanWithDetails);
+        if (raw && typeof raw === "object" && !Array.isArray(raw) && "mp" in raw && "ois" in raw)
+          return formatCameraLensForDisplay(raw as CameraLensData);
         return "";
       })
       .filter(Boolean);
@@ -296,6 +332,20 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
         {isSpecSheetTemplate ? (
           <>
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-4">{product.name}</h2>
+            {(product.announcement_date || product.release_date || product.discontinued_date) && (
+              <div className="text-sm text-gray-400 dark:text-gray-500 mb-4">
+                {product.announcement_date && (
+                  <>Announced: {formatDate(product.announcement_date)}</>
+                )}
+                {product.announcement_date && product.release_date && " • "}
+                {product.release_date && (
+                  <>Released: {formatDate(product.release_date)}</>
+                )}
+                {product.discontinued_date && (
+                  <> • Discontinued: {formatDate(product.discontinued_date)}</>
+                )}
+              </div>
+            )}
             {/* Standalone Spec Sheet — GSMArena-style grouped table */}
             <div className="w-full bg-white/5 border border-white/10 rounded-xl overflow-hidden mb-8">
               {templateSchema.length === 0 ? (
@@ -307,8 +357,10 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
                     const specName = spec.name?.trim() ?? "";
                     const val = getRawSpecValue(product.specs, groupName, specName);
                     if (typeof val === "string") return val.trim() !== "";
-                    if (Array.isArray(val)) return val.some((x) => ((x.ram ?? "") + (x.storage ?? "")).trim() !== "");
+                    if (Array.isArray(val)) return val.some((x) => ((x.value1 ?? "") + (x.value2 ?? "")).trim() !== "");
                     if (val && typeof val === "object" && !Array.isArray(val) && "value" in val) return true;
+                    if (val && typeof val === "object" && !Array.isArray(val) && "mp" in val && "ois" in val)
+                      return formatCameraLensForDisplay(val as CameraLensData).length > 0;
                     return false;
                   });
                   if (specRows.length === 0) return null;
@@ -324,19 +376,30 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
                           typeof rawValue === "string"
                             ? rawValue.trim()
                             : Array.isArray(rawValue)
-                              ? (rawValue as VariantMatrixEntry[])
-                                  .map((item) => {
-                                    const r = (item.ram ?? "").trim();
-                                    const s = (item.storage ?? "").trim();
-                                    if (r && s) return `${r} RAM / ${s}`;
-                                    if (r) return `${r} RAM`;
-                                    return s;
-                                  })
-                                  .filter(Boolean)
-                                  .join(", ")
+                              ? (() => {
+                                  const hideLabels = (spec as SpecItem).matrixConfig?.hideLabelsPublicly === true;
+                                  const label1 = hideLabels ? "" : ((spec as SpecItem).matrixConfig?.col1Label ?? "");
+                                  const label2 = hideLabels ? "" : ((spec as SpecItem).matrixConfig?.col2Label ?? "");
+                                  return (rawValue as VariantMatrixEntry[])
+                                    .map((item) => {
+                                      const v1 = (item.value1 ?? "").trim();
+                                      const v2 = (item.value2 ?? "").trim();
+                                      if (hideLabels) {
+                                        if (v1 && v2) return `${v1} / ${v2}`;
+                                        return v1 || v2;
+                                      }
+                                      if (v1 && v2) return `${v1} ${label1} / ${v2} ${label2}`.trim();
+                                      if (v1) return `${v1} ${label1}`.trim();
+                                      return `${v2} ${label2}`.trim();
+                                    })
+                                    .filter(Boolean)
+                                    .join(", ");
+                                })()
                               : rawValue && typeof rawValue === "object" && !Array.isArray(rawValue) && "value" in rawValue
                                 ? formatBooleanWithDetails(rawValue as BooleanWithDetails)
-                                : "";
+                                : rawValue && typeof rawValue === "object" && !Array.isArray(rawValue) && "mp" in rawValue && "ois" in rawValue
+                                  ? formatCameraLensForDisplay(rawValue as CameraLensData)
+                                  : "";
                         if (!display) return null;
                         return (
                           <div
@@ -418,11 +481,25 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
           </div>
           )}
 
-          {/* Column 2: Narrative — Name + Bottom Line */}
+          {/* Column 2: Narrative — Name + Lifecycle dates + Bottom Line */}
           <div className={`flex flex-col justify-center ${!showImageAttr ? "md:col-span-9" : "md:col-span-6"}`}>
             <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">
               {product.name}
             </h2>
+            {(product.announcement_date || product.release_date || product.discontinued_date) && (
+              <div className="text-sm text-gray-400 dark:text-gray-500 mt-2">
+                {product.announcement_date && (
+                  <>Announced: {formatDate(product.announcement_date)}</>
+                )}
+                {product.announcement_date && product.release_date && " • "}
+                {product.release_date && (
+                  <>Released: {formatDate(product.release_date)}</>
+                )}
+                {product.discontinued_date && (
+                  <> • Discontinued: {formatDate(product.discontinued_date)}</>
+                )}
+              </div>
+            )}
             {isShow(data.show_bottom_line) && displayDescription && (
               <p className="text-lg opacity-90 leading-relaxed text-gray-700 dark:text-gray-200">
                 {displayDescription}

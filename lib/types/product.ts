@@ -24,16 +24,30 @@ export type { SpecGroup, SpecItem } from "./template";
 /** Key/value product specs (e.g. cpu, ram, display). Flat format. */
 export type ProductSpecs = Record<string, string>;
 
-/** One RAM + Storage pairing for variant_matrix spec type. */
-export type VariantMatrixEntry = { ram: string; storage: string };
+/** One row for variant_matrix spec type (generic col1/col2). */
+export type VariantMatrixEntry = { value1: string; value2: string };
 
 /** Boolean spec with optional details (boolean spec type). */
 export type BooleanWithDetails = { value: boolean; details: string };
 
-/** Nested specs by group. Values can be string, variant matrix array, or boolean with details. */
+/** Camera lens structured spec (camera_lens spec type). */
+export type CameraLensData = {
+  mp: string;
+  aperture: string;
+  focalLength: string;
+  fov: string;
+  lensType: string;
+  sensorSize: string;
+  pixelSize: string;
+  autofocus: string;
+  zoom: string;
+  ois: boolean;
+};
+
+/** Nested specs by group. Values can be string, variant matrix, boolean with details, or camera lens. */
 export type ProductSpecsNested = Record<
   string,
-  Record<string, string | VariantMatrixEntry[] | BooleanWithDetails>
+  Record<string, string | VariantMatrixEntry[] | BooleanWithDetails | CameraLensData>
 >;
 
 /** Product specs may be stored flat (legacy) or nested by group. */
@@ -72,15 +86,25 @@ function isBooleanWithDetails(v: unknown): v is BooleanWithDetails {
   );
 }
 
+function isCameraLensData(v: unknown): v is CameraLensData {
+  return (
+    typeof v === "object" &&
+    v !== null &&
+    !Array.isArray(v) &&
+    "mp" in v &&
+    "ois" in v &&
+    typeof (v as CameraLensData).ois === "boolean"
+  );
+}
+
 /**
- * Get raw spec value (string, variant matrix array, or boolean with details) for a given group + spec.
- * Use when template has SpecGroup[] and you need to handle variant_matrix or boolean.
+ * Get raw spec value (string, variant matrix array, boolean with details, or camera lens) for a given group + spec.
  */
 export function getRawSpecValue(
   specs: ProductSpecsInput | null | undefined,
   groupName: string,
   specName: string
-): string | VariantMatrixEntry[] | BooleanWithDetails | undefined {
+): string | VariantMatrixEntry[] | BooleanWithDetails | CameraLensData | undefined {
   if (!specs || typeof specs !== "object") return undefined;
   const first = Object.values(specs)[0];
   const isNested = typeof first === "object" && first !== null && !Array.isArray(first);
@@ -91,6 +115,7 @@ export function getRawSpecValue(
     if (typeof v === "string") return v;
     if (Array.isArray(v)) return v as VariantMatrixEntry[];
     if (isBooleanWithDetails(v)) return v as BooleanWithDetails;
+    if (isCameraLensData(v)) return v as CameraLensData;
     return undefined;
   }
   const v = (specs as ProductSpecs)[specName];
@@ -129,7 +154,12 @@ export type Product = {
   name: string;
   brand: string;
   slug: string;
+  /** ISO date (YYYY-MM-DD) or null. */
+  announcement_date?: string | null;
+  /** ISO date (YYYY-MM-DD) or null. */
   release_date: string | null;
+  /** ISO date (YYYY-MM-DD) or null. */
+  discontinued_date?: string | null;
   hero_image: string | null;
   transparent_image: string | null;
   template_id?: string | null;

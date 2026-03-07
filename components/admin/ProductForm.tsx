@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { upsertProduct } from "@/lib/actions/product";
-import type { Product, ProductSpecsNested, EditorialData, ProductTemplate, AffiliateLink, VariantMatrixEntry, BooleanWithDetails } from "@/lib/types/product";
+import type { Product, ProductSpecsNested, EditorialData, ProductTemplate, AffiliateLink, VariantMatrixEntry, BooleanWithDetails, CameraLensData } from "@/lib/types/product";
 import type { ProductSpecsInput } from "@/lib/types/product";
 import { getSpecLabelsFromSchema, getTemplateSchemaAsGroups } from "@/lib/types/template";
 import type { SpecGroup, SpecItem } from "@/lib/types/template";
@@ -84,6 +84,30 @@ function emptyProduct(): Partial<Product> {
   };
 }
 
+const DEFAULT_CAMERA_LENS: CameraLensData = {
+  mp: "",
+  aperture: "",
+  focalLength: "",
+  fov: "",
+  lensType: "",
+  sensorSize: "",
+  pixelSize: "",
+  autofocus: "",
+  zoom: "",
+  ois: false,
+};
+
+function isCameraLensData(v: unknown): v is CameraLensData {
+  return (
+    typeof v === "object" &&
+    v !== null &&
+    !Array.isArray(v) &&
+    "mp" in v &&
+    "ois" in v &&
+    typeof (v as CameraLensData).ois === "boolean"
+  );
+}
+
 /** Detect if specs are stored in nested shape (group -> spec -> value). */
 function isNestedSpecs(specs: ProductSpecsInput | null | undefined): specs is ProductSpecsNested {
   if (!specs || typeof specs !== "object") return false;
@@ -127,11 +151,11 @@ function initializeSpecs(
         const raw = nested?.[groupName]?.[name];
         const arr = Array.isArray(raw)
           ? (raw as VariantMatrixEntry[]).map((x) => ({
-              ram: typeof x?.ram === "string" ? x.ram : "",
-              storage: typeof x?.storage === "string" ? x.storage : "",
+              value1: typeof (x as { value1?: string }).value1 === "string" ? (x as VariantMatrixEntry).value1 : typeof (x as { ram?: string }).ram === "string" ? (x as { ram: string }).ram : "",
+              value2: typeof (x as { value2?: string }).value2 === "string" ? (x as VariantMatrixEntry).value2 : typeof (x as { storage?: string }).storage === "string" ? (x as { storage: string }).storage : "",
             }))
-          : [{ ram: "", storage: "" }];
-        out[groupName][name] = arr.length > 0 ? arr : [{ ram: "", storage: "" }];
+          : [{ value1: "", value2: "" }];
+        out[groupName][name] = arr.length > 0 ? arr : [{ value1: "", value2: "" }];
       } else if (specType === "boolean") {
         const raw = nested?.[groupName]?.[name];
         const obj =
@@ -146,6 +170,23 @@ function initializeSpecs(
           value: Boolean(obj.value),
           details: typeof obj.details === "string" ? obj.details : "",
         };
+      } else if (specType === "camera_lens") {
+        const raw = nested?.[groupName]?.[name];
+        const lens = isCameraLensData(raw)
+          ? {
+              mp: String(raw.mp ?? ""),
+              aperture: String(raw.aperture ?? ""),
+              focalLength: String(raw.focalLength ?? ""),
+              fov: String((raw as CameraLensData).fov ?? ""),
+              lensType: String(raw.lensType ?? ""),
+              sensorSize: String(raw.sensorSize ?? ""),
+              pixelSize: String(raw.pixelSize ?? ""),
+              autofocus: String(raw.autofocus ?? ""),
+              zoom: String(raw.zoom ?? ""),
+              ois: Boolean(raw.ois),
+            }
+          : { ...DEFAULT_CAMERA_LENS };
+        out[groupName][name] = lens;
       } else {
         const value =
           nested?.[groupName]?.[name] ?? flat[name] ?? flatFromNested[name] ?? "";
@@ -183,8 +224,14 @@ export function ProductForm({ product, templates = [], categories = [], awards =
   const [brand, setBrand] = useState(initial.brand ?? "");
   const [slug, setSlug] = useState(initial.slug ?? "");
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(Boolean(initial.slug?.trim()));
+  const [announcementDate, setAnnouncementDate] = useState(
+    (initial as { announcement_date?: string | null }).announcement_date?.slice(0, 10) ?? ""
+  );
   const [releaseDate, setReleaseDate] = useState(
     initial.release_date ? initial.release_date.slice(0, 10) : ""
+  );
+  const [discontinuedDate, setDiscontinuedDate] = useState(
+    (initial as { discontinued_date?: string | null }).discontinued_date?.slice(0, 10) ?? ""
   );
   const [seoTitle, setSeoTitle] = useState(initial.seo_title ?? "");
   const [seoDescription, setSeoDescription] = useState(initial.seo_description ?? "");
@@ -316,13 +363,13 @@ export function ProductForm({ product, templates = [], categories = [], awards =
   }, []);
 
   const updateVariantMatrix = useCallback(
-    (groupName: string, specName: string, index: number, field: "ram" | "storage", value: string) => {
+    (groupName: string, specName: string, index: number, field: "value1" | "value2", value: string) => {
       setSpecGroups((prev) => {
         const group = prev[groupName] ?? {};
         const raw = group[specName];
         const arr = Array.isArray(raw)
-          ? (raw as VariantMatrixEntry[]).map((x) => ({ ram: x.ram ?? "", storage: x.storage ?? "" }))
-          : [{ ram: "", storage: "" }];
+          ? (raw as VariantMatrixEntry[]).map((x) => ({ value1: x.value1 ?? "", value2: x.value2 ?? "" }))
+          : [{ value1: "", value2: "" }];
         const next = [...arr];
         if (index >= 0 && index < next.length) {
           next[index] = { ...next[index], [field]: value };
@@ -341,8 +388,8 @@ export function ProductForm({ product, templates = [], categories = [], awards =
       const group = prev[groupName] ?? {};
       const raw = group[specName];
       const arr = Array.isArray(raw)
-        ? [...(raw as VariantMatrixEntry[]), { ram: "", storage: "" }]
-        : [{ ram: "", storage: "" }];
+        ? [...(raw as VariantMatrixEntry[]), { value1: "", value2: "" }]
+        : [{ value1: "", value2: "" }];
       return { ...prev, [groupName]: { ...group, [specName]: arr } };
     });
   }, []);
@@ -355,7 +402,7 @@ export function ProductForm({ product, templates = [], categories = [], awards =
       const next = arr.filter((_, i) => i !== index);
       return {
         ...prev,
-        [groupName]: { ...group, [specName]: next.length > 0 ? next : [{ ram: "", storage: "" }] },
+        [groupName]: { ...group, [specName]: next.length > 0 ? next : [{ value1: "", value2: "" }] },
       };
     });
   }, []);
@@ -378,6 +425,23 @@ export function ProductForm({ product, templates = [], categories = [], awards =
               details: update.details !== undefined ? update.details : current.details,
             },
           },
+        };
+      });
+    },
+    []
+  );
+
+  const updateCameraLens = useCallback(
+    (groupName: string, specName: string, field: keyof CameraLensData, value: string | boolean) => {
+      setSpecGroups((prev) => {
+        const group = prev[groupName] ?? {};
+        const raw = group[specName];
+        const current: CameraLensData = isCameraLensData(raw)
+          ? { ...DEFAULT_CAMERA_LENS, ...raw }
+          : { ...DEFAULT_CAMERA_LENS };
+        return {
+          ...prev,
+          [groupName]: { ...group, [specName]: { ...current, [field]: value } },
         };
       });
     },
@@ -481,7 +545,9 @@ export function ProductForm({ product, templates = [], categories = [], awards =
       name: name.trim(),
       brand: brand.trim(),
       slug: slug.trim(),
+      announcement_date: announcementDate.trim() || null,
       release_date: releaseDate.trim() || null,
+      discontinued_date: discontinuedDate.trim() || null,
       hero_image: heroImage?.trim() || null,
       transparent_image: transparentImage?.trim() || null,
       template_id: templateId.trim() || null,
@@ -518,6 +584,28 @@ export function ProductForm({ product, templates = [], categories = [], awards =
       {error && (
         <div className="rounded-md border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-400">
           {error}
+        </div>
+      )}
+
+      {hasTemplate && (
+        <div className="sticky top-0 z-50 flex justify-between items-center bg-gray-900/95 backdrop-blur py-4 border-b border-white/10 mb-8 px-4 -mx-4 rounded-b">
+          <div />
+          <div className="flex gap-3">
+            <button
+              type="submit"
+              disabled={saving}
+              className="rounded-md bg-hot-white px-4 py-2 font-sans text-sm font-medium text-hot-black transition-colors hover:bg-hot-white/90 disabled:opacity-50"
+            >
+              {saving ? "Saving…" : product ? "Update Product" : "Create Product"}
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/admin/products")}
+              className="rounded-md border border-white/20 px-4 py-2 font-sans text-sm text-gray-400 bg-white/5 hover:bg-white/10 hover:text-hot-white"
+            >
+              Cancel
+            </button>
+          </div>
         </div>
       )}
 
@@ -606,14 +694,37 @@ export function ProductForm({ product, templates = [], categories = [], awards =
                     </button>
                   </div>
                 </div>
-                <div>
-                  <label className={labelClass}>Release Date</label>
-                  <input
-                    type="date"
-                    value={releaseDate}
-                    onChange={(e) => setReleaseDate(e.target.value)}
-                    className={inputClass}
-                  />
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className={labelClass}>Announcement Date</label>
+                    <input
+                      type="date"
+                      value={announcementDate}
+                      onChange={(e) => setAnnouncementDate(e.target.value)}
+                      className={inputClass}
+                      aria-label="Announcement date"
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Release Date</label>
+                    <input
+                      type="date"
+                      value={releaseDate}
+                      onChange={(e) => setReleaseDate(e.target.value)}
+                      className={inputClass}
+                      aria-label="Release date"
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Discontinued Date</label>
+                    <input
+                      type="date"
+                      value={discontinuedDate}
+                      onChange={(e) => setDiscontinuedDate(e.target.value)}
+                      className={inputClass}
+                      aria-label="Discontinued date"
+                    />
+                  </div>
                 </div>
                 <div>
                   <label className={labelClass}>Category</label>
@@ -754,219 +865,9 @@ export function ProductForm({ product, templates = [], categories = [], awards =
           )}
         </div>
 
-        {/* Right column: Specs, Editorial Data, Rating (only when template selected) */}
+        {/* Right column: Editorial Data -> Rating -> Where to Buy -> Specs */}
         {hasTemplate && (
           <div className="space-y-8 lg:col-span-7">
-            <section className="space-y-4">
-              <h2 className="font-sans text-lg font-medium text-hot-white">
-                Specs
-              </h2>
-              {(() => {
-                const schemaGroups = getTemplateSchemaAsGroups(selectedTemplate?.spec_schema);
-                if (schemaGroups.length === 0) return null;
-                return (
-                  <div className="space-y-6">
-                    {schemaGroups.map((group, idx) => (
-                      <div key={group.id || group.groupName}>
-                        <h4 className={`font-bold mb-2 text-hot-white ${idx === 0 ? "mt-0" : "mt-6"}`}>
-                          {group.groupName || "General"}
-                        </h4>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          {(group.specs ?? []).map((spec) => {
-                            const groupName = group.groupName?.trim() || "General";
-                            const specName = spec.name?.trim();
-                            if (!specName) return null;
-                            const specType = (spec as SpecItem).type ?? "text";
-                            if (specType === "variant_matrix") {
-                              const raw = specGroups[groupName]?.[specName];
-                              const entries: VariantMatrixEntry[] = Array.isArray(raw)
-                                ? (raw as VariantMatrixEntry[]).map((x) => ({
-                                    ram: typeof x?.ram === "string" ? x.ram : "",
-                                    storage: typeof x?.storage === "string" ? x.storage : "",
-                                  }))
-                                : [{ ram: "", storage: "" }];
-                              return (
-                                <div key={spec.id || specName} className="md:col-span-2 space-y-2">
-                                  <label className={labelClass}>{specName}</label>
-                                  <div className="space-y-2">
-                                    {entries.map((entry, idx) => (
-                                      <div
-                                        key={idx}
-                                        className="grid grid-cols-12 gap-2 items-center rounded border border-white/10 bg-white/5 p-2"
-                                      >
-                                        <input
-                                          type="text"
-                                          value={entry.ram}
-                                          onChange={(e) =>
-                                            updateVariantMatrix(groupName, specName, idx, "ram", e.target.value)
-                                          }
-                                          className={`${inputClass} col-span-5`}
-                                          placeholder="e.g. 8GB"
-                                        />
-                                        <input
-                                          type="text"
-                                          value={entry.storage}
-                                          onChange={(e) =>
-                                            updateVariantMatrix(groupName, specName, idx, "storage", e.target.value)
-                                          }
-                                          className={`${inputClass} col-span-5`}
-                                          placeholder="e.g. 256GB"
-                                        />
-                                        <button
-                                          type="button"
-                                          onClick={() => removeVariantMatrixRow(groupName, specName, idx)}
-                                          className="col-span-2 rounded px-2 py-1.5 text-sm text-red-400 hover:bg-red-500/10"
-                                          aria-label="Remove configuration"
-                                        >
-                                          Remove
-                                        </button>
-                                      </div>
-                                    ))}
-                                    <button
-                                      type="button"
-                                      onClick={() => addVariantMatrixRow(groupName, specName)}
-                                      className="rounded-md border border-white/20 bg-white/5 px-3 py-1.5 font-sans text-sm text-gray-400 hover:bg-white/10 hover:text-hot-white"
-                                    >
-                                      + Add Configuration
-                                    </button>
-                                  </div>
-                                </div>
-                              );
-                            }
-                            if (specType === "boolean") {
-                              const raw = specGroups[groupName]?.[specName];
-                              const boolVal: BooleanWithDetails =
-                                raw && typeof raw === "object" && !Array.isArray(raw) && "value" in raw
-                                  ? {
-                                      value: Boolean((raw as BooleanWithDetails).value),
-                                      details: String((raw as BooleanWithDetails).details ?? ""),
-                                    }
-                                  : { value: false, details: "" };
-                              return (
-                                <div key={spec.id || specName} className="flex flex-col gap-2">
-                                  <label className={labelClass}>{specName}</label>
-                                  <div className="flex flex-wrap items-center gap-3">
-                                    <label className="flex items-center gap-2 cursor-pointer">
-                                      <input
-                                        type="checkbox"
-                                        checked={boolVal.value}
-                                        onChange={(e) =>
-                                          updateBooleanSpec(groupName, specName, { value: e.target.checked })
-                                        }
-                                        className="rounded border-white/20"
-                                      />
-                                      <span className="text-sm text-gray-400">Yes / No</span>
-                                    </label>
-                                    {boolVal.value && (
-                                      <input
-                                        type="text"
-                                        value={boolVal.details}
-                                        onChange={(e) =>
-                                          updateBooleanSpec(groupName, specName, { details: e.target.value })
-                                        }
-                                        className={inputClass}
-                                        placeholder="Optional details (e.g., 15W Qi2)"
-                                      />
-                                    )}
-                                  </div>
-                                </div>
-                              );
-                            }
-                            const value = specGroups[groupName]?.[specName];
-                            const textValue = typeof value === "string" ? value : "";
-                            return (
-                              <div key={spec.id || specName}>
-                                <label className={labelClass}>{specName}</label>
-                                <input
-                                  type="text"
-                                  value={textValue}
-                                  onChange={(e) =>
-                                    updateSpecValue(groupName, specName, e.target.value)
-                                  }
-                                  className={inputClass}
-                                  placeholder={`e.g. ${specName}`}
-                                />
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                );
-              })()}
-            </section>
-
-            <section className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h2 className="font-sans text-lg font-medium text-hot-white">
-                  Where to Buy
-                </h2>
-                {affiliateLinks.length < 5 && (
-                  <button
-                    type="button"
-                    onClick={addAffiliateLink}
-                    className="rounded-md border border-white/20 bg-white/5 px-3 py-1.5 font-sans text-sm text-gray-400 hover:bg-white/10 hover:text-hot-white"
-                  >
-                    Add Link
-                  </button>
-                )}
-              </div>
-              <p className="text-sm text-gray-500">
-                Up to 5 retailer links (e.g. Amazon, store URL).
-              </p>
-              <div className="space-y-3">
-                {affiliateLinks.map((link, i) => (
-                  <div key={i} className="grid grid-cols-12 gap-2 w-full rounded border border-white/10 bg-white/5 p-2">
-                    <input
-                      type="text"
-                      value={link.retailer ?? ""}
-                      onChange={(e) => updateAffiliateLink(i, "retailer", e.target.value)}
-                      className={`${inputClass} col-span-3 w-full`}
-                      placeholder="Retailer (e.g. Amazon)"
-                    />
-                    <input
-                      type="url"
-                      value={link.url ?? ""}
-                      onChange={(e) => updateAffiliateLink(i, "url", e.target.value)}
-                      className={`${inputClass} col-span-5 w-full`}
-                      placeholder="URL"
-                    />
-                    <div className="col-span-2">
-                      <input
-                        type="text"
-                        value={link.price_amount ?? ""}
-                        onChange={(e) => updateAffiliateLink(i, "price_amount", e.target.value)}
-                        className={`${inputClass} w-full`}
-                        placeholder="Price (e.g. 49.99)"
-                      />
-                    </div>
-                    <select
-                      value={link.price_currency || DEFAULT_CURRENCY_CODE}
-                      onChange={(e) => updateAffiliateLink(i, "price_currency", e.target.value)}
-                      className={`${inputClass} col-span-2 w-full`}
-                      title="Currency"
-                      aria-label="Currency"
-                    >
-                      {CURRENCY_OPTIONS.map((opt) => (
-                        <option key={opt.code} value={opt.code}>
-                          {opt.symbol}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="button"
-                      onClick={() => removeAffiliateLink(i)}
-                      className="col-span-12 rounded border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-red-400 hover:bg-red-500/10 w-fit"
-                      aria-label="Remove link"
-                    >
-                      Remove
-                    </button>
-                  </div>
-                ))}
-              </div>
-            </section>
-
             <section className="space-y-4">
               <h2 className="font-sans text-lg font-medium text-hot-white">
                 Editorial data
@@ -1135,28 +1036,295 @@ export function ProductForm({ product, templates = [], categories = [], awards =
                 />
               </div>
             </section>
+
+            <section className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="font-sans text-lg font-medium text-hot-white">
+                  Where to Buy
+                </h2>
+                {affiliateLinks.length < 5 && (
+                  <button
+                    type="button"
+                    onClick={addAffiliateLink}
+                    className="rounded-md border border-white/20 bg-white/5 px-3 py-1.5 font-sans text-sm text-gray-400 hover:bg-white/10 hover:text-hot-white"
+                  >
+                    Add Link
+                  </button>
+                )}
+              </div>
+              <p className="text-sm text-gray-500">
+                Up to 5 retailer links (e.g. Amazon, store URL).
+              </p>
+              <div className="space-y-3">
+                {affiliateLinks.map((link, i) => (
+                  <div key={i} className="grid grid-cols-12 gap-2 w-full rounded border border-white/10 bg-white/5 p-2">
+                    <input
+                      type="text"
+                      value={link.retailer ?? ""}
+                      onChange={(e) => updateAffiliateLink(i, "retailer", e.target.value)}
+                      className={`${inputClass} col-span-3 w-full`}
+                      placeholder="Retailer (e.g. Amazon)"
+                    />
+                    <input
+                      type="url"
+                      value={link.url ?? ""}
+                      onChange={(e) => updateAffiliateLink(i, "url", e.target.value)}
+                      className={`${inputClass} col-span-5 w-full`}
+                      placeholder="URL"
+                    />
+                    <div className="col-span-2">
+                      <input
+                        type="text"
+                        value={link.price_amount ?? ""}
+                        onChange={(e) => updateAffiliateLink(i, "price_amount", e.target.value)}
+                        className={`${inputClass} w-full`}
+                        placeholder="Price (e.g. 49.99)"
+                      />
+                    </div>
+                    <select
+                      value={link.price_currency || DEFAULT_CURRENCY_CODE}
+                      onChange={(e) => updateAffiliateLink(i, "price_currency", e.target.value)}
+                      className={`${inputClass} col-span-2 w-full`}
+                      title="Currency"
+                      aria-label="Currency"
+                    >
+                      {CURRENCY_OPTIONS.map((opt) => (
+                        <option key={opt.code} value={opt.code}>
+                          {opt.symbol}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => removeAffiliateLink(i)}
+                      className="col-span-12 rounded border border-white/10 bg-white/5 px-2 py-1.5 text-sm text-red-400 hover:bg-red-500/10 w-fit"
+                      aria-label="Remove link"
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="space-y-4">
+              <h2 className="font-sans text-lg font-medium text-hot-white">
+                Specs
+              </h2>
+              {(() => {
+                const schemaGroups = getTemplateSchemaAsGroups(selectedTemplate?.spec_schema);
+                if (schemaGroups.length === 0) return null;
+                return (
+                  <div className="space-y-4">
+                    {schemaGroups.map((group, idx) => (
+                      <details
+                        key={group.id || group.groupName}
+                        className="group mb-4 bg-white/5 border border-white/10 rounded-xl overflow-hidden"
+                        open={idx === 0}
+                      >
+                        <summary className="p-4 font-bold cursor-pointer bg-white/5 hover:bg-white/10 list-none flex justify-between items-center">
+                          {group.groupName || "General"}
+                          <span className="text-gray-400 group-open:rotate-180 transition-transform">▼</span>
+                        </summary>
+                        <div className="p-4 grid grid-cols-1 xl:grid-cols-2 gap-4">
+                          {(group.specs ?? []).map((spec) => {
+                            const groupName = group.groupName?.trim() || "General";
+                            const specName = spec.name?.trim();
+                            if (!specName) return null;
+                            const specType = (spec as SpecItem).type ?? "text";
+                            if (specType === "variant_matrix") {
+                              const raw = specGroups[groupName]?.[specName];
+                              const entries: VariantMatrixEntry[] = Array.isArray(raw)
+                                ? (raw as VariantMatrixEntry[]).map((x) => ({
+                                    value1: typeof x?.value1 === "string" ? x.value1 : "",
+                                    value2: typeof x?.value2 === "string" ? x.value2 : "",
+                                  }))
+                                : [{ value1: "", value2: "" }];
+                              const col1Label = (spec as SpecItem).matrixConfig?.col1Label || "Value 1";
+                              const col2Label = (spec as SpecItem).matrixConfig?.col2Label || "Value 2";
+                              return (
+                                <div key={spec.id || specName} className="md:col-span-2 space-y-2">
+                                  <label className={labelClass}>{specName}</label>
+                                  <div className="space-y-2">
+                                    {entries.map((entry, idx) => (
+                                      <div
+                                        key={idx}
+                                        className="grid grid-cols-12 gap-2 items-center rounded border border-white/10 bg-white/5 p-2"
+                                      >
+                                        <input
+                                          type="text"
+                                          value={entry.value1}
+                                          onChange={(e) =>
+                                            updateVariantMatrix(groupName, specName, idx, "value1", e.target.value)
+                                          }
+                                          className={`${inputClass} col-span-5`}
+                                          placeholder={col1Label}
+                                        />
+                                        <input
+                                          type="text"
+                                          value={entry.value2}
+                                          onChange={(e) =>
+                                            updateVariantMatrix(groupName, specName, idx, "value2", e.target.value)
+                                          }
+                                          className={`${inputClass} col-span-5`}
+                                          placeholder={col2Label}
+                                        />
+                                        <button
+                                          type="button"
+                                          onClick={() => removeVariantMatrixRow(groupName, specName, idx)}
+                                          className="col-span-2 rounded px-2 py-1.5 text-sm text-red-400 hover:bg-red-500/10"
+                                          aria-label="Remove configuration"
+                                        >
+                                          Remove
+                                        </button>
+                                      </div>
+                                    ))}
+                                    <button
+                                      type="button"
+                                      onClick={() => addVariantMatrixRow(groupName, specName)}
+                                      className="rounded-md border border-white/20 bg-white/5 px-3 py-1.5 font-sans text-sm text-gray-400 hover:bg-white/10 hover:text-hot-white"
+                                    >
+                                      + Add Configuration
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            if (specType === "boolean") {
+                              const raw = specGroups[groupName]?.[specName];
+                              const boolVal: BooleanWithDetails =
+                                raw && typeof raw === "object" && !Array.isArray(raw) && "value" in raw
+                                  ? {
+                                      value: Boolean((raw as BooleanWithDetails).value),
+                                      details: String((raw as BooleanWithDetails).details ?? ""),
+                                    }
+                                  : { value: false, details: "" };
+                              return (
+                                <div key={spec.id || specName} className="flex flex-col gap-2">
+                                  <label className={labelClass}>{specName}</label>
+                                  <div className="flex flex-wrap items-center gap-3">
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                      <input
+                                        type="checkbox"
+                                        checked={boolVal.value}
+                                        onChange={(e) =>
+                                          updateBooleanSpec(groupName, specName, { value: e.target.checked })
+                                        }
+                                        className="rounded border-white/20"
+                                      />
+                                      <span className="text-sm text-gray-400">Yes / No</span>
+                                    </label>
+                                    {boolVal.value && (
+                                      <input
+                                        type="text"
+                                        value={boolVal.details}
+                                        onChange={(e) =>
+                                          updateBooleanSpec(groupName, specName, { details: e.target.value })
+                                        }
+                                        className={inputClass}
+                                        placeholder="Optional details (e.g., 15W Qi2)"
+                                      />
+                                    )}
+                                  </div>
+                                </div>
+                              );
+                            }
+                            if (specType === "camera_lens") {
+                              const raw = specGroups[groupName]?.[specName];
+                              const lens: CameraLensData = isCameraLensData(raw)
+                                ? { ...DEFAULT_CAMERA_LENS, ...raw }
+                                : { ...DEFAULT_CAMERA_LENS };
+                              const input = (key: keyof Omit<CameraLensData, "ois">, placeholder: string) => (
+                                <input
+                                  type="text"
+                                  value={lens[key]}
+                                  onChange={(e) => updateCameraLens(groupName, specName, key, e.target.value)}
+                                  className={inputClass}
+                                  placeholder={placeholder}
+                                />
+                              );
+                              return (
+                                <div key={spec.id || specName} className="md:col-span-2">
+                                  <label className={labelClass}>{specName}</label>
+                                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3 p-4 bg-white/5 rounded-lg border border-white/10 mt-2">
+                                    <div>
+                                      <label className="text-xs text-gray-500 block mb-0.5">MP</label>
+                                      {input("mp", "e.g. 50")}
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-500 block mb-0.5">Aperture</label>
+                                      {input("aperture", "e.g. f/1.8")}
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-500 block mb-0.5">Focal length</label>
+                                      {input("focalLength", "e.g. 24mm")}
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-500 block mb-0.5">Field of View (FoV)</label>
+                                      {input("fov", "e.g. 120°")}
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-500 block mb-0.5">Lens type</label>
+                                      {input("lensType", "e.g. Wide")}
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-500 block mb-0.5">Sensor size</label>
+                                      {input("sensorSize", "e.g. 1/1.28&quot;")}
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-500 block mb-0.5">Pixel size</label>
+                                      {input("pixelSize", "e.g. 1.22µm")}
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-500 block mb-0.5">Autofocus</label>
+                                      {input("autofocus", "e.g. PDAF")}
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-500 block mb-0.5">Zoom</label>
+                                      {input("zoom", "e.g. 2x")}
+                                    </div>
+                                    <div className="flex items-end">
+                                      <label className="flex items-center gap-2 cursor-pointer pb-2">
+                                        <input
+                                          type="checkbox"
+                                          checked={lens.ois}
+                                          onChange={(e) => updateCameraLens(groupName, specName, "ois", e.target.checked)}
+                                          className="rounded border-white/20"
+                                        />
+                                        <span className="text-sm text-gray-400">Optical Image Stabilization (OIS)</span>
+                                      </label>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            const value = specGroups[groupName]?.[specName];
+                            const textValue = typeof value === "string" ? value : "";
+                            return (
+                              <div key={spec.id || specName}>
+                                <label className={labelClass}>{specName}</label>
+                                <input
+                                  type="text"
+                                  value={textValue}
+                                  onChange={(e) =>
+                                    updateSpecValue(groupName, specName, e.target.value)
+                                  }
+                                  className={inputClass}
+                                  placeholder={`e.g. ${specName}`}
+                                />
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </details>
+                    ))}
+                  </div>
+                );
+              })()}
+            </section>
           </div>
         )}
       </div>
-
-      {hasTemplate && (
-        <div className="flex gap-3 pt-4">
-          <button
-            type="submit"
-            disabled={saving}
-            className="rounded-md bg-hot-white px-4 py-2 font-sans text-sm font-medium text-hot-black transition-colors hover:bg-hot-white/90 disabled:opacity-50"
-          >
-            {saving ? "Saving…" : product ? "Update Product" : "Create Product"}
-          </button>
-          <button
-            type="button"
-            onClick={() => router.push("/admin/products")}
-            className="rounded-md border border-white/20 px-4 py-2 font-sans text-sm text-gray-400 hover:bg-white/5 hover:text-hot-white"
-          >
-            Cancel
-          </button>
-        </div>
-      )}
     </form>
   );
 }

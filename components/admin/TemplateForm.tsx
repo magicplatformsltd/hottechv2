@@ -62,7 +62,7 @@ function normalizeSpecSchema(
       },
     ];
   }
-  // Already SpecGroup[] — preserve type and all spec fields
+  // Already SpecGroup[] — preserve type, matrixConfig, and all spec fields
   if (typeof first === "object" && first !== null && "groupName" in first && "specs" in first) {
     return (raw as SpecGroup[]).map((g) => ({
       id: g.id || generateId(),
@@ -73,6 +73,7 @@ function normalizeSpecSchema(
         name: typeof s.name === "string" ? s.name : String(s.name ?? ""),
         isKey: Boolean(s.isKey),
         type: s.type,
+        matrixConfig: s.matrixConfig,
       })),
     }));
   }
@@ -140,7 +141,62 @@ function SortableSpecItem({
         <option value="text">Standard Text</option>
         <option value="variant_matrix">Variant Matrix (RAM + Storage)</option>
         <option value="boolean">Yes/No Toggle (with details)</option>
+        <option value="camera_lens">Camera Lens (Structured Form)</option>
       </select>
+      {(spec.type ?? "text") === "variant_matrix" && (
+        <div className="flex flex-wrap items-center gap-2 w-full basis-full">
+          <input
+            type="text"
+            value={spec.matrixConfig?.col1Label ?? ""}
+            onChange={(e) =>
+              onUpdate({
+                matrixConfig: {
+                  col1Label: e.target.value,
+                  col2Label: spec.matrixConfig?.col2Label ?? "",
+                  hideLabelsPublicly: spec.matrixConfig?.hideLabelsPublicly ?? false,
+                },
+              })
+            }
+            className={`${cls} max-w-[180px]`}
+            placeholder="Column 1 (e.g. RAM, Resolution)"
+            aria-label="Column 1 label"
+          />
+          <input
+            type="text"
+            value={spec.matrixConfig?.col2Label ?? ""}
+            onChange={(e) =>
+              onUpdate({
+                matrixConfig: {
+                  col1Label: spec.matrixConfig?.col1Label ?? "",
+                  col2Label: e.target.value,
+                  hideLabelsPublicly: spec.matrixConfig?.hideLabelsPublicly ?? false,
+                },
+              })
+            }
+            className={`${cls} max-w-[180px]`}
+            placeholder="Column 2 (e.g. Storage, Frame Rate)"
+            aria-label="Column 2 label"
+          />
+          <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-400">
+            <input
+              type="checkbox"
+              checked={spec.matrixConfig?.hideLabelsPublicly ?? false}
+              onChange={(e) =>
+                onUpdate({
+                  matrixConfig: {
+                    col1Label: spec.matrixConfig?.col1Label ?? "",
+                    col2Label: spec.matrixConfig?.col2Label ?? "",
+                    hideLabelsPublicly: e.target.checked,
+                  },
+                })
+              }
+              className="rounded border-white/20"
+              aria-label="Hide labels on front-end"
+            />
+            Hide labels on front-end (useful for Video/Pairs)
+          </label>
+        </div>
+      )}
       <label className="flex shrink-0 items-center gap-1.5 text-sm text-gray-400">
         <input
           type="checkbox"
