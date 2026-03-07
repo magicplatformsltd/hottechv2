@@ -44,10 +44,33 @@ export type CameraLensData = {
   ois: boolean;
 };
 
-/** Nested specs by group. Values can be string, variant matrix, boolean with details, or camera lens. */
+/** One dust/water pair for ip_rating spec type. */
+export type IpRatingEntry = { dust: string; water: string };
+
+/** Display panel structured spec (display_panel spec type). */
+export type DisplayPanelData = {
+  displayName: string;
+  diagonalSize: string;
+  screenToBodyRatio: string;
+  panelType: string;
+  colorDepth: string;
+  resolution: string;
+  aspectRatio: string;
+  pixelDensity: string;
+  refreshRate: string;
+  pwm: string;
+  hbmBrightness: string;
+  peakBrightness: string;
+  protection: string;
+  hasDolbyVision: boolean;
+  hasHDR10Plus: boolean;
+  otherFeatures: string;
+};
+
+/** Nested specs by group. Values can be string, variant matrix, boolean with details, camera lens, display panel, or IP rating array. */
 export type ProductSpecsNested = Record<
   string,
-  Record<string, string | VariantMatrixEntry[] | BooleanWithDetails | CameraLensData>
+  Record<string, string | VariantMatrixEntry[] | BooleanWithDetails | CameraLensData | DisplayPanelData | IpRatingEntry[]>
 >;
 
 /** Product specs may be stored flat (legacy) or nested by group. */
@@ -97,14 +120,33 @@ function isCameraLensData(v: unknown): v is CameraLensData {
   );
 }
 
+function isDisplayPanelData(v: unknown): v is DisplayPanelData {
+  return (
+    typeof v === "object" &&
+    v !== null &&
+    !Array.isArray(v) &&
+    "hasDolbyVision" in v &&
+    "hasHDR10Plus" in v &&
+    typeof (v as DisplayPanelData).hasDolbyVision === "boolean" &&
+    typeof (v as DisplayPanelData).hasHDR10Plus === "boolean"
+  );
+}
+
+function isIpRatingEntryArray(v: unknown): v is IpRatingEntry[] {
+  return (
+    Array.isArray(v) &&
+    (v.length === 0 || (v[0] != null && typeof v[0] === "object" && "dust" in v[0] && "water" in v[0]))
+  );
+}
+
 /**
- * Get raw spec value (string, variant matrix array, boolean with details, or camera lens) for a given group + spec.
+ * Get raw spec value (string, variant matrix array, IP rating array, boolean with details, camera lens, or display panel) for a given group + spec.
  */
 export function getRawSpecValue(
   specs: ProductSpecsInput | null | undefined,
   groupName: string,
   specName: string
-): string | VariantMatrixEntry[] | BooleanWithDetails | CameraLensData | undefined {
+): string | VariantMatrixEntry[] | IpRatingEntry[] | BooleanWithDetails | CameraLensData | DisplayPanelData | undefined {
   if (!specs || typeof specs !== "object") return undefined;
   const first = Object.values(specs)[0];
   const isNested = typeof first === "object" && first !== null && !Array.isArray(first);
@@ -113,9 +155,13 @@ export function getRawSpecValue(
     if (!group || typeof group !== "object") return undefined;
     const v = group[specName];
     if (typeof v === "string") return v;
-    if (Array.isArray(v)) return v as VariantMatrixEntry[];
+    if (Array.isArray(v)) {
+      if (isIpRatingEntryArray(v)) return v as IpRatingEntry[];
+      return v as VariantMatrixEntry[];
+    }
     if (isBooleanWithDetails(v)) return v as BooleanWithDetails;
     if (isCameraLensData(v)) return v as CameraLensData;
+    if (isDisplayPanelData(v)) return v as DisplayPanelData;
     return undefined;
   }
   const v = (specs as ProductSpecs)[specName];

@@ -4,7 +4,7 @@ import { useState, useCallback, useEffect, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { RefreshCw } from "lucide-react";
 import { upsertProduct } from "@/lib/actions/product";
-import type { Product, ProductSpecsNested, EditorialData, ProductTemplate, AffiliateLink, VariantMatrixEntry, BooleanWithDetails, CameraLensData } from "@/lib/types/product";
+import type { Product, ProductSpecsNested, EditorialData, ProductTemplate, AffiliateLink, VariantMatrixEntry, IpRatingEntry, BooleanWithDetails, CameraLensData, DisplayPanelData } from "@/lib/types/product";
 import type { ProductSpecsInput } from "@/lib/types/product";
 import { getSpecLabelsFromSchema, getTemplateSchemaAsGroups } from "@/lib/types/template";
 import type { SpecGroup, SpecItem } from "@/lib/types/template";
@@ -97,6 +97,25 @@ const DEFAULT_CAMERA_LENS: CameraLensData = {
   ois: false,
 };
 
+const DEFAULT_DISPLAY_PANEL: DisplayPanelData = {
+  displayName: "",
+  diagonalSize: "",
+  screenToBodyRatio: "",
+  panelType: "",
+  colorDepth: "",
+  resolution: "",
+  aspectRatio: "",
+  pixelDensity: "",
+  refreshRate: "",
+  pwm: "",
+  hbmBrightness: "",
+  peakBrightness: "",
+  protection: "",
+  hasDolbyVision: false,
+  hasHDR10Plus: false,
+  otherFeatures: "",
+};
+
 function isCameraLensData(v: unknown): v is CameraLensData {
   return (
     typeof v === "object" &&
@@ -105,6 +124,18 @@ function isCameraLensData(v: unknown): v is CameraLensData {
     "mp" in v &&
     "ois" in v &&
     typeof (v as CameraLensData).ois === "boolean"
+  );
+}
+
+function isDisplayPanelData(v: unknown): v is DisplayPanelData {
+  return (
+    typeof v === "object" &&
+    v !== null &&
+    !Array.isArray(v) &&
+    "hasDolbyVision" in v &&
+    "hasHDR10Plus" in v &&
+    typeof (v as DisplayPanelData).hasDolbyVision === "boolean" &&
+    typeof (v as DisplayPanelData).hasHDR10Plus === "boolean"
   );
 }
 
@@ -187,6 +218,35 @@ function initializeSpecs(
             }
           : { ...DEFAULT_CAMERA_LENS };
         out[groupName][name] = lens;
+      } else if (specType === "display_panel") {
+        const raw = nested?.[groupName]?.[name];
+        const panel = isDisplayPanelData(raw)
+          ? {
+              displayName: String(raw.displayName ?? ""),
+              diagonalSize: String(raw.diagonalSize ?? ""),
+              screenToBodyRatio: String(raw.screenToBodyRatio ?? ""),
+              panelType: String(raw.panelType ?? ""),
+              colorDepth: String(raw.colorDepth ?? ""),
+              resolution: String(raw.resolution ?? ""),
+              aspectRatio: String(raw.aspectRatio ?? ""),
+              pixelDensity: String(raw.pixelDensity ?? ""),
+              refreshRate: String(raw.refreshRate ?? ""),
+              pwm: String(raw.pwm ?? ""),
+              hbmBrightness: String(raw.hbmBrightness ?? ""),
+              peakBrightness: String(raw.peakBrightness ?? ""),
+              protection: String(raw.protection ?? ""),
+              hasDolbyVision: Boolean(raw.hasDolbyVision),
+              hasHDR10Plus: Boolean(raw.hasHDR10Plus),
+              otherFeatures: String(raw.otherFeatures ?? ""),
+            }
+          : { ...DEFAULT_DISPLAY_PANEL };
+        out[groupName][name] = panel;
+      } else if (specType === "ip_rating") {
+        const raw = nested?.[groupName]?.[name];
+        const arr = Array.isArray(raw) && raw.length > 0 && raw[0] != null && "dust" in raw[0] && "water" in raw[0]
+          ? (raw as IpRatingEntry[]).map((x) => ({ dust: String(x.dust ?? "X"), water: String(x.water ?? "X") }))
+          : [{ dust: "X", water: "X" }];
+        out[groupName][name] = arr.length > 0 ? arr : [{ dust: "X", water: "X" }];
       } else {
         const value =
           nested?.[groupName]?.[name] ?? flat[name] ?? flatFromNested[name] ?? "";
@@ -415,6 +475,46 @@ export function ProductForm({ product, templates = [], categories = [], awards =
     });
   }, []);
 
+  const updateIpRating = useCallback(
+    (groupName: string, specName: string, index: number, field: "dust" | "water", value: string) => {
+      setSpecGroups((prev) => {
+        const group = prev[groupName] ?? {};
+        const raw = group[specName];
+        const arr = Array.isArray(raw) && raw[0] != null && "dust" in raw[0]
+          ? (raw as IpRatingEntry[]).map((x) => ({ dust: x.dust ?? "X", water: x.water ?? "X" }))
+          : [{ dust: "X", water: "X" }];
+        const next = [...arr];
+        if (index >= 0 && index < next.length) next[index] = { ...next[index], [field]: value };
+        return { ...prev, [groupName]: { ...group, [specName]: next } };
+      });
+    },
+    []
+  );
+
+  const addIpRatingRow = useCallback((groupName: string, specName: string) => {
+    setSpecGroups((prev) => {
+      const group = prev[groupName] ?? {};
+      const raw = group[specName];
+      const arr = Array.isArray(raw) && raw[0] != null && "dust" in raw[0]
+        ? [...(raw as IpRatingEntry[]), { dust: "X", water: "X" }]
+        : [{ dust: "X", water: "X" }];
+      return { ...prev, [groupName]: { ...group, [specName]: arr } };
+    });
+  }, []);
+
+  const removeIpRatingRow = useCallback((groupName: string, specName: string, index: number) => {
+    setSpecGroups((prev) => {
+      const group = prev[groupName] ?? {};
+      const raw = group[specName];
+      const arr = Array.isArray(raw) && raw[0] != null && "dust" in raw[0] ? (raw as IpRatingEntry[]) : [];
+      const next = arr.filter((_, i) => i !== index);
+      return {
+        ...prev,
+        [groupName]: { ...group, [specName]: next.length > 0 ? next : [{ dust: "X", water: "X" }] },
+      };
+    });
+  }, []);
+
   const updateBooleanSpec = useCallback(
     (groupName: string, specName: string, update: Partial<BooleanWithDetails>) => {
       setSpecGroups((prev) => {
@@ -447,6 +547,23 @@ export function ProductForm({ product, templates = [], categories = [], awards =
         const current: CameraLensData = isCameraLensData(raw)
           ? { ...DEFAULT_CAMERA_LENS, ...raw }
           : { ...DEFAULT_CAMERA_LENS };
+        return {
+          ...prev,
+          [groupName]: { ...group, [specName]: { ...current, [field]: value } },
+        };
+      });
+    },
+    []
+  );
+
+  const updateDisplayPanel = useCallback(
+    (groupName: string, specName: string, field: keyof DisplayPanelData, value: string | boolean) => {
+      setSpecGroups((prev) => {
+        const group = prev[groupName] ?? {};
+        const raw = group[specName];
+        const current: DisplayPanelData = isDisplayPanelData(raw)
+          ? { ...DEFAULT_DISPLAY_PANEL, ...raw }
+          : { ...DEFAULT_DISPLAY_PANEL };
         return {
           ...prev,
           [groupName]: { ...group, [specName]: { ...current, [field]: value } },
@@ -1234,6 +1351,83 @@ export function ProductForm({ product, templates = [], categories = [], awards =
                                 </div>
                               );
                             }
+                            if (specType === "ip_rating") {
+                              const raw = specGroups[groupName]?.[specName];
+                              const entries: IpRatingEntry[] =
+                                Array.isArray(raw) && raw[0] != null && "dust" in raw[0]
+                                  ? (raw as IpRatingEntry[]).map((x) => ({ dust: x.dust ?? "X", water: x.water ?? "X" }))
+                                  : [{ dust: "X", water: "X" }];
+                              const DUST_OPTIONS = [
+                                { value: "X", label: "X (Not tested/No rating)" },
+                                ...["0", "1", "2", "3", "4", "5", "6"].map((v) => ({ value: v, label: v })),
+                              ];
+                              const WATER_OPTIONS = [
+                                { value: "X", label: "X (Not tested)" },
+                                ...["0", "1", "2", "3", "4", "5", "6", "7", "8", "9"].map((v) => ({ value: v, label: v })),
+                              ];
+                              return (
+                                <div key={spec.id || specName} className="md:col-span-2 space-y-2">
+                                  <label className={labelClass}>{specName}</label>
+                                  <div className="space-y-2">
+                                    {entries.map((entry, idx) => (
+                                      <div
+                                        key={idx}
+                                        className="grid grid-cols-12 gap-2 items-center rounded border border-white/10 bg-white/5 p-2"
+                                      >
+                                        <div className="col-span-5">
+                                          <label className="text-xs text-gray-500 block mb-0.5">Dust</label>
+                                          <select
+                                            value={entry.dust}
+                                            onChange={(e) => updateIpRating(groupName, specName, idx, "dust", e.target.value)}
+                                            className={inputClass}
+                                            aria-label="Dust rating"
+                                          >
+                                            {DUST_OPTIONS.map((opt) => (
+                                              <option key={opt.value} value={opt.value}>
+                                                {opt.label}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        </div>
+                                        <div className="col-span-5">
+                                          <label className="text-xs text-gray-500 block mb-0.5">Water</label>
+                                          <select
+                                            value={entry.water}
+                                            onChange={(e) => updateIpRating(groupName, specName, idx, "water", e.target.value)}
+                                            className={inputClass}
+                                            aria-label="Water rating"
+                                          >
+                                            {WATER_OPTIONS.map((opt) => (
+                                              <option key={opt.value} value={opt.value}>
+                                                {opt.label}
+                                              </option>
+                                            ))}
+                                          </select>
+                                        </div>
+                                        <div className="col-span-2 flex items-end">
+                                          <button
+                                            type="button"
+                                            onClick={() => removeIpRatingRow(groupName, specName, idx)}
+                                            disabled={entries.length <= 1}
+                                            className="rounded px-2 py-1.5 text-sm text-red-400 hover:bg-red-500/10 disabled:opacity-40 disabled:cursor-not-allowed"
+                                            aria-label="Remove IP rating"
+                                          >
+                                            Remove
+                                          </button>
+                                        </div>
+                                      </div>
+                                    ))}
+                                    <button
+                                      type="button"
+                                      onClick={() => addIpRatingRow(groupName, specName)}
+                                      className="rounded-md border border-white/20 bg-white/5 px-3 py-1.5 font-sans text-sm text-gray-400 hover:bg-white/10 hover:text-hot-white"
+                                    >
+                                      + Add IP Rating
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            }
                             if (specType === "boolean") {
                               const raw = specGroups[groupName]?.[specName];
                               const boolVal: BooleanWithDetails =
@@ -1337,6 +1531,114 @@ export function ProductForm({ product, templates = [], categories = [], awards =
                                         />
                                         <span className="text-sm text-gray-400">Optical Image Stabilization (OIS)</span>
                                       </label>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            }
+                            if (specType === "display_panel") {
+                              const raw = specGroups[groupName]?.[specName];
+                              const panel: DisplayPanelData = isDisplayPanelData(raw)
+                                ? { ...DEFAULT_DISPLAY_PANEL, ...raw }
+                                : { ...DEFAULT_DISPLAY_PANEL };
+                              const text = (key: keyof Omit<DisplayPanelData, "hasDolbyVision" | "hasHDR10Plus">, placeholder: string) => (
+                                <input
+                                  type="text"
+                                  value={panel[key]}
+                                  onChange={(e) => updateDisplayPanel(groupName, specName, key, e.target.value)}
+                                  className={inputClass}
+                                  placeholder={placeholder}
+                                />
+                              );
+                              return (
+                                <div key={spec.id || specName} className="md:col-span-2">
+                                  <label className={labelClass}>{specName}</label>
+                                  <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-3 p-4 bg-white/5 rounded-lg border border-white/10 mt-2">
+                                    <div>
+                                      <label className="text-xs text-gray-500 block mb-0.5">Display name</label>
+                                      {text("displayName", "e.g. Primary")}
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-500 block mb-0.5">Diagonal size</label>
+                                      {text("diagonalSize", "e.g. 6.7")}
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-500 block mb-0.5">Screen-to-body ratio</label>
+                                      {text("screenToBodyRatio", "e.g. 89%")}
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-500 block mb-0.5">Panel type</label>
+                                      {text("panelType", "e.g. AMOLED")}
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-500 block mb-0.5">Color depth</label>
+                                      <select
+                                        value={panel.colorDepth}
+                                        onChange={(e) => updateDisplayPanel(groupName, specName, "colorDepth", e.target.value)}
+                                        className={inputClass}
+                                        aria-label="Color depth"
+                                      >
+                                        <option value="">Color Depth (Unknown)</option>
+                                        <option value="8-bit">8-bit (16M colors)</option>
+                                        <option value="10-bit">10-bit (1B colors)</option>
+                                        <option value="12-bit">12-bit (68B colors)</option>
+                                      </select>
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-500 block mb-0.5">Resolution</label>
+                                      {text("resolution", "e.g. 1440×3200")}
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-500 block mb-0.5">Aspect ratio</label>
+                                      {text("aspectRatio", "e.g. 20:9")}
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-500 block mb-0.5">Pixel density</label>
+                                      {text("pixelDensity", "e.g. 526")}
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-500 block mb-0.5">Refresh rate</label>
+                                      {text("refreshRate", "e.g. 120")}
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-500 block mb-0.5">PWM</label>
+                                      {text("pwm", "e.g. 2160")}
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-500 block mb-0.5">HBM brightness</label>
+                                      {text("hbmBrightness", "e.g. 1600")}
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-500 block mb-0.5">Peak brightness</label>
+                                      {text("peakBrightness", "e.g. 2600")}
+                                    </div>
+                                    <div>
+                                      <label className="text-xs text-gray-500 block mb-0.5">Protection</label>
+                                      {text("protection", "e.g. Gorilla Glass Victus")}
+                                    </div>
+                                    <div className="flex items-end gap-4">
+                                      <label className="flex items-center gap-2 cursor-pointer pb-2">
+                                        <input
+                                          type="checkbox"
+                                          checked={panel.hasDolbyVision}
+                                          onChange={(e) => updateDisplayPanel(groupName, specName, "hasDolbyVision", e.target.checked)}
+                                          className="rounded border-white/20"
+                                        />
+                                        <span className="text-sm text-gray-400">Dolby Vision</span>
+                                      </label>
+                                      <label className="flex items-center gap-2 cursor-pointer pb-2">
+                                        <input
+                                          type="checkbox"
+                                          checked={panel.hasHDR10Plus}
+                                          onChange={(e) => updateDisplayPanel(groupName, specName, "hasHDR10Plus", e.target.checked)}
+                                          className="rounded border-white/20"
+                                        />
+                                        <span className="text-sm text-gray-400">HDR10+</span>
+                                      </label>
+                                    </div>
+                                    <div className="xl:col-span-2">
+                                      <label className="text-xs text-gray-500 block mb-0.5">Other features</label>
+                                      {text("otherFeatures", "e.g. LTPO, Always-on")}
                                     </div>
                                   </div>
                                 </div>

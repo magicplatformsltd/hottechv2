@@ -6,7 +6,7 @@ import { Plus, Minus, CheckCircle, XCircle } from "lucide-react";
 import { getProductById } from "@/lib/actions/product";
 import { getTemplateById } from "@/lib/actions/template";
 import { getAwardById } from "@/lib/actions/award";
-import type { Product, ProductSpecsInput, VariantMatrixEntry, BooleanWithDetails, CameraLensData } from "@/lib/types/product";
+import type { Product, ProductSpecsInput, VariantMatrixEntry, IpRatingEntry, BooleanWithDetails, CameraLensData, DisplayPanelData } from "@/lib/types/product";
 import { getFlattenedSpecs, getRawSpecValue } from "@/lib/types/product";
 import type { ProductTemplate } from "@/lib/types/product";
 import type { ProductBoxBlockData } from "@/lib/types/post";
@@ -145,7 +145,78 @@ function formatCameraLensForDisplay(item: CameraLensData): string {
   return parts.join(", ") || "";
 }
 
-/** Combined key specs per group: { label: groupName, value: space-joined key spec values }. Handles variant_matrix. */
+/** Format display panel data as strict 7-line string. Uses whitespace-pre-line when rendered. */
+function formatDisplayPanelForDisplay(item: DisplayPanelData): string {
+  const formatUnit = (val: string | undefined, unit: string) => {
+    if (!val) return "";
+    const lowerVal = val.toLowerCase();
+    const lowerUnit = unit.toLowerCase().trim();
+    if (lowerVal.includes(lowerUnit)) return val;
+    return `${val}${unit}`;
+  };
+
+  const sizeVal = formatUnit((item.diagonalSize ?? "").trim(), " inches");
+  const resVal = formatUnit((item.resolution ?? "").trim(), " pixels");
+  const densityVal = (item.pixelDensity ?? "").trim()
+    ? `~${formatUnit((item.pixelDensity ?? "").trim(), " ppi")} density`
+    : "";
+  const refreshVal = (item.refreshRate ?? "").trim()
+    ? `${formatUnit((item.refreshRate ?? "").trim(), "Hz")} Refresh Rate`
+    : "";
+  const pwmVal = (item.pwm ?? "").trim() ? `${formatUnit((item.pwm ?? "").trim(), "Hz")} PWM` : "";
+  const hbmVal = (item.hbmBrightness ?? "").trim()
+    ? `${formatUnit((item.hbmBrightness ?? "").trim(), " nits")} (HBM)`
+    : "";
+  const peakVal = (item.peakBrightness ?? "").trim()
+    ? `${formatUnit((item.peakBrightness ?? "").trim(), " nits")} (Peak)`
+    : "";
+
+  const typeParts = [(item.panelType ?? "").trim(), (item.colorDepth ?? "").trim()].filter(Boolean);
+  const lineType = typeParts.length > 0 ? `Type: ${typeParts.join(", ")}` : "";
+
+  const sizeParts = [
+    sizeVal,
+    (item.screenToBodyRatio ?? "").trim() ? `(~${(item.screenToBodyRatio ?? "").trim()} screen-to-body ratio)` : "",
+  ].filter(Boolean);
+  const lineSize = sizeParts.length > 0 ? `Size: ${sizeParts.join(" ")}` : "";
+
+  const resParts = [
+    resVal,
+    (item.aspectRatio ?? "").trim() ? `${(item.aspectRatio ?? "").trim()} ratio` : "",
+    densityVal,
+  ].filter(Boolean);
+  const lineRes = resParts.length > 0 ? `Resolution: ${resParts.join(", ")}` : "";
+
+  const ratingParts = [refreshVal, pwmVal].filter(Boolean);
+  const lineRatings = ratingParts.length > 0 ? `Display Ratings: ${ratingParts.join(", ")}` : "";
+
+  const brightParts = [hbmVal, peakVal].filter(Boolean);
+  const lineBright = brightParts.length > 0 ? `Brightness: ${brightParts.join(" / ")}` : "";
+
+  const featParts = [
+    item.hasDolbyVision ? "Dolby Vision" : "",
+    item.hasHDR10Plus ? "HDR10+" : "",
+    (item.otherFeatures ?? "").trim(),
+  ].filter(Boolean);
+  const lineFeat = featParts.length > 0 ? `Features: ${featParts.join(", ")}` : "";
+
+  const lineProt = (item.protection ?? "").trim() ? `Protection: ${(item.protection ?? "").trim()}` : "";
+
+  const displayString = [lineType, lineSize, lineRes, lineRatings, lineBright, lineFeat, lineProt]
+    .filter(Boolean)
+    .join("\n");
+  return displayString;
+}
+
+/** Format IP rating array as "IP68 / IP69". Empty returns "". Only IPXX returns "Not officially rated". */
+function formatIpRatingForDisplay(arr: IpRatingEntry[]): string {
+  if (!Array.isArray(arr) || arr.length === 0) return "";
+  const onlyXX = arr.every((p) => (p.dust ?? "X") === "X" && (p.water ?? "X") === "X");
+  if (onlyXX) return "Not officially rated";
+  return arr.map((pair) => `IP${pair.dust ?? "X"}${pair.water ?? "X"}`).join(" / ");
+}
+
+/** Combined key specs per group: { label: groupName, value: space-joined key spec values }. Handles variant_matrix, ip_rating. */
 function getCombinedKeySpecs(
   productSpecs: ProductSpecsInput | null | undefined,
   templateSchema: SpecGroup[]
@@ -158,11 +229,17 @@ function getCombinedKeySpecs(
       .map((s) => {
         const raw = getRawSpecValue(productSpecs, groupName, s.name ?? "");
         if (typeof raw === "string") return raw.trim();
-        if (Array.isArray(raw) && raw.length > 0) return formatVariantMatrixForCombiner(raw as VariantMatrixEntry[], s);
+        if (Array.isArray(raw) && raw.length > 0) {
+          if (raw[0] != null && "dust" in raw[0] && "water" in raw[0])
+            return formatIpRatingForDisplay(raw as IpRatingEntry[]);
+          return formatVariantMatrixForCombiner(raw as VariantMatrixEntry[], s);
+        }
         if (raw && typeof raw === "object" && !Array.isArray(raw) && "value" in raw)
           return formatBooleanWithDetails(raw as BooleanWithDetails);
         if (raw && typeof raw === "object" && !Array.isArray(raw) && "mp" in raw && "ois" in raw)
           return formatCameraLensForDisplay(raw as CameraLensData);
+        if (raw && typeof raw === "object" && !Array.isArray(raw) && "hasDolbyVision" in raw && "hasHDR10Plus" in raw)
+          return formatDisplayPanelForDisplay(raw as DisplayPanelData);
         return "";
       })
       .filter(Boolean);
@@ -343,10 +420,14 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
                     const specName = spec.name?.trim() ?? "";
                     const val = getRawSpecValue(product.specs, groupName, specName);
                     if (typeof val === "string") return val.trim() !== "";
+                    if (Array.isArray(val) && val.length > 0 && val[0] != null && "dust" in val[0] && "water" in val[0])
+                      return true;
                     if (Array.isArray(val)) return val.some((x) => ((x.value1 ?? "") + (x.value2 ?? "")).trim() !== "");
                     if (val && typeof val === "object" && !Array.isArray(val) && "value" in val) return true;
                     if (val && typeof val === "object" && !Array.isArray(val) && "mp" in val && "ois" in val)
                       return formatCameraLensForDisplay(val as CameraLensData).length > 0;
+                    if (val && typeof val === "object" && !Array.isArray(val) && "hasDolbyVision" in val && "hasHDR10Plus" in val)
+                      return formatDisplayPanelForDisplay(val as DisplayPanelData).length > 0;
                     return false;
                   });
                   if (specRows.length === 0) return null;
@@ -361,41 +442,55 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
                         const display =
                           typeof rawValue === "string"
                             ? rawValue.trim()
-                            : Array.isArray(rawValue)
-                              ? (() => {
-                                  const hideLabels = (spec as SpecItem).matrixConfig?.hideLabelsPublicly === true;
-                                  const label1 = hideLabels ? "" : ((spec as SpecItem).matrixConfig?.col1Label ?? "");
-                                  const label2 = hideLabels ? "" : ((spec as SpecItem).matrixConfig?.col2Label ?? "");
-                                  return (rawValue as VariantMatrixEntry[])
-                                    .map((item) => {
-                                      const v1 = (item.value1 ?? "").trim();
-                                      const v2 = (item.value2 ?? "").trim();
-                                      if (hideLabels) {
-                                        if (v1 && v2) return `${v1} / ${v2}`;
-                                        return v1 || v2;
-                                      }
-                                      if (v1 && v2) return `${v1} ${label1} / ${v2} ${label2}`.trim();
-                                      if (v1) return `${v1} ${label1}`.trim();
-                                      return `${v2} ${label2}`.trim();
-                                    })
-                                    .filter(Boolean)
-                                    .join(", ");
-                                })()
-                              : rawValue && typeof rawValue === "object" && !Array.isArray(rawValue) && "value" in rawValue
+                            : Array.isArray(rawValue) && rawValue.length > 0 && rawValue[0] != null && "dust" in rawValue[0] && "water" in rawValue[0]
+                              ? formatIpRatingForDisplay(rawValue as IpRatingEntry[])
+                              : Array.isArray(rawValue)
+                                ? (() => {
+                                    const hideLabels = (spec as SpecItem).matrixConfig?.hideLabelsPublicly === true;
+                                    const label1 = hideLabels ? "" : ((spec as SpecItem).matrixConfig?.col1Label ?? "");
+                                    const label2 = hideLabels ? "" : ((spec as SpecItem).matrixConfig?.col2Label ?? "");
+                                    return (rawValue as VariantMatrixEntry[])
+                                      .map((item) => {
+                                        const v1 = (item.value1 ?? "").trim();
+                                        const v2 = (item.value2 ?? "").trim();
+                                        if (hideLabels) {
+                                          if (v1 && v2) return `${v1} / ${v2}`;
+                                          return v1 || v2;
+                                        }
+                                        if (v1 && v2) return `${v1} ${label1} / ${v2} ${label2}`.trim();
+                                        if (v1) return `${v1} ${label1}`.trim();
+                                        return `${v2} ${label2}`.trim();
+                                      })
+                                      .filter(Boolean)
+                                      .join(", ");
+                                  })()
+                                : rawValue && typeof rawValue === "object" && !Array.isArray(rawValue) && "value" in rawValue
                                 ? formatBooleanWithDetails(rawValue as BooleanWithDetails)
                                 : rawValue && typeof rawValue === "object" && !Array.isArray(rawValue) && "mp" in rawValue && "ois" in rawValue
                                   ? formatCameraLensForDisplay(rawValue as CameraLensData)
-                                  : "";
+                                  : rawValue && typeof rawValue === "object" && !Array.isArray(rawValue) && "hasDolbyVision" in rawValue && "hasHDR10Plus" in rawValue
+                                    ? formatDisplayPanelForDisplay(rawValue as DisplayPanelData)
+                                    : "";
                         if (!display) return null;
+                        let rowLabel = specName.replace(/_/g, " ");
+                        if (
+                          rawValue &&
+                          typeof rawValue === "object" &&
+                          "displayName" in rawValue &&
+                          (rawValue as { displayName?: string }).displayName
+                        ) {
+                          rowLabel = String((rawValue as { displayName: string }).displayName).trim();
+                        }
+                        const isDisplayPanel = rawValue && typeof rawValue === "object" && !Array.isArray(rawValue) && "hasDolbyVision" in rawValue && "hasHDR10Plus" in rawValue;
                         return (
                           <div
                             key={spec.id || specName}
                             className="flex border-b border-white/5 last:border-b-0"
                           >
                             <div className="w-1/3 font-medium text-gray-400 p-3 text-sm capitalize">
-                              {specName.replace(/_/g, " ")}
+                              {rowLabel}
                             </div>
-                            <div className="w-2/3 text-gray-900 dark:text-white p-3 text-sm">
+                            <div className={`w-2/3 text-gray-900 dark:text-white p-3 text-sm ${isDisplayPanel ? "whitespace-pre-line" : ""}`}>
                               {display}
                             </div>
                           </div>

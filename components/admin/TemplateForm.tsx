@@ -142,6 +142,8 @@ function SortableSpecItem({
         <option value="variant_matrix">Variant Matrix (RAM + Storage)</option>
         <option value="boolean">Yes/No Toggle (with details)</option>
         <option value="camera_lens">Camera Lens (Structured Form)</option>
+        <option value="display_panel">Display Panel (Structured Form)</option>
+        <option value="ip_rating">IP Rating (Dust/Water Pairs)</option>
       </select>
       {(spec.type ?? "text") === "variant_matrix" && (
         <div className="flex flex-wrap items-center gap-2 w-full basis-full">
