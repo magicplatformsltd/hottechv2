@@ -102,7 +102,7 @@ export async function extractProductData(
   const u = (url ?? "").trim();
   const tid = (templateId ?? "").trim();
   if (!u || !tid) {
-    return { specs: null, error: "url and templateId are required." };
+    return { specs: null, identity: null, error: "url and templateId are required." };
   }
 
   const [fetchResult, template] = await Promise.all([
@@ -130,7 +130,7 @@ export async function extractProductData(
 
   const client = getOpenAIClient();
   if (!client) {
-    return { specs: null, error: "OPENAI_API_KEY is not set." };
+    return { specs: null, identity: null, error: "OPENAI_API_KEY is not set." };
   }
 
   const schemaDesc = buildSchemaDescription(schema);

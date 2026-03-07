@@ -14,7 +14,7 @@ const BROWSER_HEADERS: Record<string, string> = {
 
 export type FetchMarkdownResult =
   | { markdown: string; isHtml?: boolean; statusCode?: undefined }
-  | { markdown: null; statusCode?: number };
+  | { markdown: null; statusCode?: number; isHtml?: boolean };
 
 /** Strip <script> and <style> tags from HTML to reduce noise for LLM. */
 function stripScriptAndStyle(html: string): string {
