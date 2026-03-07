@@ -240,6 +240,8 @@ export type Product = {
   categories?: { id?: number; name?: string; slug?: string } | null;
   /** Joined from product_tags junction (tags nested). */
   product_tags?: { tag_id?: number; tags?: { id: number; name: string; slug: string } }[] | null;
+  /** Joined from product_awards (products.award_id). */
+  product_awards?: { name?: string; tier?: string } | null;
   slug: string;
   /** ISO date (YYYY-MM-DD) or null. */
   announcement_date?: string | null;

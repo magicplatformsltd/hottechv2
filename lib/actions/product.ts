@@ -240,7 +240,7 @@ export async function getProducts(): Promise<Product[]> {
   const client = await createClient();
   const { data, error } = await client
     .from("products")
-    .select("*, brands(*), categories(*), product_tags(tags(id, name, slug))")
+    .select("*, brands(*), categories(*), product_awards(name, tier), product_tags(tags(id, name, slug))")
     .order("created_at", { ascending: false });
 
   if (error) {
