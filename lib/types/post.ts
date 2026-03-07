@@ -109,4 +109,15 @@ export type ProductBoxBlockData = {
   productId: string;
   productName?: string;
   config: ProductBoxBlockConfig;
+  /** Display preset: full_card | compact | spec_sheet */
+  template?: string;
+  show_image?: boolean;
+  show_award?: boolean;
+  show_specs?: boolean;
+  show_breakdown?: boolean;
+  show_pros_cons?: boolean;
+  /** JSON array string or string[] override for pros */
+  custom_pros?: string | string[] | null;
+  /** JSON array string or string[] override for cons */
+  custom_cons?: string | string[] | null;
 };

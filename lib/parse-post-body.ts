@@ -230,6 +230,11 @@ function findMatchingDivEnd(html: string, startIndex: number): number {
   return startIndex;
 }
 
+function getBoolAttr(tag: string, name: string): boolean {
+  const match = tag.match(new RegExp(`data-${name}="([^"]*)"`, "i"));
+  return match?.[1] !== "false";
+}
+
 /** Extract product-box blocks from HTML. */
 function extractProductBoxBlocks(html: string): { index: number; data: ProductBoxBlockData; length: number }[] {
   const blocks: { index: number; data: ProductBoxBlockData; length: number }[] = [];
@@ -240,6 +245,9 @@ function extractProductBoxBlocks(html: string): { index: number; data: ProductBo
     const idMatch = tag.match(/data-product-id="([^"]*)"/);
     const nameMatch = tag.match(/data-product-name="([^"]*)"/);
     const configMatch = tag.match(/data-product-config="((?:[^"\\]|\\.)*)"/);
+    const templateMatch = tag.match(/data-template="([^"]*)"/);
+    const customProsMatch = tag.match(/data-custom-pros="((?:[^"\\]|\\.)*)"/);
+    const customConsMatch = tag.match(/data-custom-cons="((?:[^"\\]|\\.)*)"/);
     const productId = idMatch?.[1] ?? "";
     const productName = nameMatch?.[1] ?? "";
     let config: ProductBoxBlockConfig = {};
@@ -250,12 +258,50 @@ function extractProductBoxBlocks(html: string): { index: number; data: ProductBo
         /* use empty config */
       }
     }
+    const template = templateMatch?.[1] ?? "full_card";
+    const show_image = getBoolAttr(tag, "show-image");
+    const show_award = getBoolAttr(tag, "show-award");
+    const show_specs = getBoolAttr(tag, "show-specs");
+    const show_breakdown = getBoolAttr(tag, "show-breakdown");
+    const show_pros_cons = getBoolAttr(tag, "show-pros-cons");
+    let custom_pros: string | string[] | null = null;
+    if (customProsMatch?.[1]) {
+      try {
+        const decoded = decodeAttrValue(customProsMatch[1].replace(/\\"/g, '"'));
+        const parsed = JSON.parse(decoded);
+        custom_pros = Array.isArray(parsed) ? parsed : decoded;
+      } catch {
+        custom_pros = customProsMatch[1];
+      }
+    }
+    let custom_cons: string | string[] | null = null;
+    if (customConsMatch?.[1]) {
+      try {
+        const decoded = decodeAttrValue(customConsMatch[1].replace(/\\"/g, '"'));
+        const parsed = JSON.parse(decoded);
+        custom_cons = Array.isArray(parsed) ? parsed : decoded;
+      } catch {
+        custom_cons = customConsMatch[1];
+      }
+    }
     const endTagStart = m.index + tag.length;
     const endIndex = findMatchingDivEnd(html, endTagStart);
     const length = endIndex - m.index;
     blocks.push({
       index: m.index,
-      data: { productId, productName, config },
+      data: {
+        productId,
+        productName,
+        config,
+        template,
+        show_image,
+        show_award,
+        show_specs,
+        show_breakdown,
+        show_pros_cons,
+        custom_pros,
+        custom_cons,
+      },
       length,
     });
   }

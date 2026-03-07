@@ -79,8 +79,25 @@ function getButtonLabel(
   return parts.length ? parts.join("") : "Check price";
 }
 
+function normalizeCustomList(raw: string | string[] | null | undefined): string[] {
+  if (raw == null) return [];
+  if (Array.isArray(raw)) return raw.filter((s) => typeof s === "string" && s.trim());
+  if (typeof raw !== "string") return [];
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((s) => typeof s === "string" && s.trim()) : [];
+  } catch {
+    return raw.trim() ? [raw.trim()] : [];
+  }
+}
+
 export function ProductReviewCard({ data, className = "" }: ProductReviewCardProps) {
   const { productId, productName, config } = data;
+  const showImageAttr = data.show_image !== false;
+  const showAwardAttr = data.show_award !== false;
+  const showSpecsAttr = data.show_specs !== false;
+  const showBreakdownAttr = data.show_breakdown !== false;
+  const showProsConsAttr = data.show_pros_cons !== false;
   const [product, setProduct] = useState<Product | null>(null);
   const [template, setTemplate] = useState<ProductTemplate | null>(null);
   const [award, setAward] = useState<Awaited<ReturnType<typeof getAwardById>>>(null);
@@ -161,7 +178,7 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
     product.editorial_data?.bottom_line ||
     "";
 
-  const showImage = config.showImage !== false;
+  const showImage = showImageAttr && config.showImage !== false;
   const imageType = config.imageType === "hero" ? "hero" : "transparent";
   const imageUrl =
     showImage &&
@@ -191,16 +208,22 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
 
   const finalScore = product.editorial_data?.final_score;
   const showStarRating = config.showStarRating !== false;
-  const showAward = config.showAward !== false;
+  const showAward = showAwardAttr && config.showAward !== false;
   const subScores = product.editorial_data?.sub_scores ?? {};
   const subScoreEntries = Object.entries(subScores);
+
+  const customProsList = normalizeCustomList(data.custom_pros);
+  const customConsList = normalizeCustomList(data.custom_cons);
+  const displayPros = customProsList.length > 0 ? customProsList : (product.editorial_data?.pros ?? []);
+  const displayCons = customConsList.length > 0 ? customConsList : (product.editorial_data?.cons ?? []);
 
   const primaryAffiliate = displayAffiliates[0];
   const secondaryAffiliates = displayAffiliates.slice(1);
 
   const hasProsCons =
+    showProsConsAttr &&
     config.showProsCons !== false &&
-    ((product.editorial_data?.pros?.length ?? 0) + (product.editorial_data?.cons?.length ?? 0) > 0);
+    (displayPros.length > 0 || displayCons.length > 0);
 
   return (
     <article
@@ -211,6 +234,7 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
         {/* Row 1: Editorial Hero — Image | Narrative | Validation */}
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6 mb-8">
           {/* Column 1: Identity — Product Image */}
+          {showImageAttr && (
           <div className="md:col-span-3">
             {imageUrl ? (
               <div className="w-full aspect-square bg-white/5 rounded-xl p-4 flex items-center justify-center">
@@ -229,9 +253,10 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
               </div>
             )}
           </div>
+          )}
 
           {/* Column 2: Narrative — Name + Bottom Line */}
-          <div className="md:col-span-6 flex flex-col justify-center">
+          <div className={`flex flex-col justify-center ${!showImageAttr ? "md:col-span-9" : "md:col-span-6"}`}>
             <h2 className="text-2xl font-bold mb-4 text-gray-900 dark:text-white">
               {product.name}
             </h2>
@@ -266,11 +291,11 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
         </div>
 
         {/* Row 2: Data Grid — KEY SPECS | BREAKDOWN (mobile: Breakdown first, then Specs) */}
-        {(keySpecsToShow.length > 0 || subScoreEntries.length > 0) && (
+        {(showSpecsAttr || showBreakdownAttr) && (keySpecsToShow.length > 0 || subScoreEntries.length > 0) && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 border-t border-white/10 pt-8">
-            {/* KEY SPECS — on md order-1 (left); on mobile order-2 (after Breakdown) */}
-            {keySpecsToShow.length > 0 && (
-              <div className="md:order-1 order-2">
+            {/* KEY SPECS — on md order-1 (left); on mobile order-2 (after Breakdown); full width if no breakdown */}
+            {showSpecsAttr && keySpecsToShow.length > 0 && (
+              <div className={showBreakdownAttr ? "md:order-1 order-2" : "md:col-span-2"}>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">
                   KEY SPECS
                 </h3>
@@ -292,9 +317,9 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
               </div>
             )}
 
-            {/* BREAKDOWN — on md order-2 (right); on mobile order-1 (first) */}
-            {subScoreEntries.length > 0 && (
-              <div className="md:order-2 order-1">
+            {/* BREAKDOWN — on md order-2 (right); on mobile order-1 (first); full width if no specs */}
+            {showBreakdownAttr && subScoreEntries.length > 0 && (
+              <div className={showSpecsAttr ? "md:order-2 order-1" : "md:col-span-2"}>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-gray-400 mb-3">
                   BREAKDOWN
                 </h3>
@@ -328,15 +353,15 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
         )}
 
         {/* Row 3: Verdict — PROS | CONS */}
-        {hasProsCons && (
+        {showProsConsAttr && hasProsCons && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8 border-t border-white/10 pt-8">
-            {product.editorial_data?.pros && product.editorial_data.pros.length > 0 && (
+            {displayPros.length > 0 && (
               <div className="rounded-lg bg-green-500/5 p-4 sm:p-5 border border-green-500/20">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-green-600 dark:text-green-400 mb-3">
                   PROS
                 </h3>
                 <ul className="space-y-1.5">
-                  {product.editorial_data.pros.map((pro, i) => (
+                  {displayPros.map((pro, i) => (
                     <li
                       key={i}
                       className="text-sm text-gray-700 dark:text-gray-200 flex items-start gap-2"
@@ -351,13 +376,13 @@ export function ProductReviewCard({ data, className = "" }: ProductReviewCardPro
                 </ul>
               </div>
             )}
-            {product.editorial_data?.cons && product.editorial_data.cons.length > 0 && (
+            {displayCons.length > 0 && (
               <div className="rounded-lg bg-red-500/5 p-4 sm:p-5 border border-red-500/20">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-red-600 dark:text-red-400 mb-3">
                   CONS
                 </h3>
                 <ul className="space-y-1.5">
-                  {product.editorial_data.cons.map((con, i) => (
+                  {displayCons.map((con, i) => (
                     <li
                       key={i}
                       className="text-sm text-gray-700 dark:text-gray-200 flex items-start gap-2"

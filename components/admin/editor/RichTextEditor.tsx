@@ -14,9 +14,9 @@ import { ImageGalleryExtension } from "./extensions/ImageGallery";
 import { ImageComparisonExtension } from "./extensions/ImageComparison";
 import { PullQuoteExtension } from "./extensions/PullQuote";
 import { KeyTakeawaysExtension } from "./extensions/KeyTakeaways";
-import { ProductBoxExtension, PRODUCT_BOX_EDIT_EVENT } from "./extensions/ProductBox";
+import { ProductBoxExtension, PRODUCT_BOX_EDIT_EVENT, DEFAULT_PRODUCT_BOX_CONFIG, type ProductBoxConfig } from "./extensions/ProductBox";
 import { ProductInjectionModal } from "./ProductInjectionModal";
-import type { ProductBoxConfig } from "./extensions/ProductBox";
+import type { ProductBoxInsertPayload } from "./ProductInjectionModal";
 import {
   Bold,
   Italic,
@@ -115,11 +115,7 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
   const [sponsorModalInitialData, setSponsorModalInitialData] = useState<SponsorBlockData>(DEFAULT_SPONSOR_BLOCK_DATA);
   const sponsorEditPositionRef = useRef<number | null>(null);
   const [productModalOpen, setProductModalOpen] = useState(false);
-  const [productEditState, setProductEditState] = useState<{
-    productId: string;
-    productName: string;
-    config: ProductBoxConfig;
-  } | null>(null);
+  const [productEditState, setProductEditState] = useState<ProductBoxInsertPayload | null>(null);
   const productEditPositionRef = useRef<number | null>(null);
 
   const editor = useEditor({
@@ -287,11 +283,32 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
         productId: string;
         productName: string;
         config: ProductBoxConfig;
+        template?: string;
+        show_image?: boolean;
+        show_award?: boolean;
+        show_specs?: boolean;
+        show_breakdown?: boolean;
+        show_pros_cons?: boolean;
+        custom_pros?: string | null;
+        custom_cons?: string | null;
         position: number;
       }>;
-      const { productId, productName, config, position } = ev.detail ?? {};
+      const detail = ev.detail ?? {};
+      const { productId, position } = detail;
       if (productId == null || typeof position !== "number") return;
-      setProductEditState({ productId, productName: productName ?? "", config: config ?? {} });
+      setProductEditState({
+        productId,
+        productName: detail.productName ?? "",
+        config: detail.config ?? {},
+        template: detail.template,
+        show_image: detail.show_image,
+        show_award: detail.show_award,
+        show_specs: detail.show_specs,
+        show_breakdown: detail.show_breakdown,
+        show_pros_cons: detail.show_pros_cons,
+        custom_pros: detail.custom_pros ?? null,
+        custom_cons: detail.custom_cons ?? null,
+      });
       productEditPositionRef.current = position;
       setProductModalOpen(true);
     };
@@ -300,23 +317,32 @@ export const RichTextEditor = forwardRef<RichTextEditorHandle, RichTextEditorPro
   }, []);
 
   const handleProductInsert = useCallback(
-    async (payload: { productId: string; productName: string; config: ProductBoxConfig }) => {
+    async (payload: ProductBoxInsertPayload) => {
       if (!editor) return;
       const pos = productEditPositionRef.current;
+      const attrs = {
+        productId: payload.productId,
+        productName: payload.productName ?? "",
+        config: JSON.stringify({ ...DEFAULT_PRODUCT_BOX_CONFIG, ...payload.config }),
+        template: payload.template ?? "full_card",
+        show_image: payload.show_image ?? true,
+        show_award: payload.show_award ?? true,
+        show_specs: payload.show_specs ?? true,
+        show_breakdown: payload.show_breakdown ?? true,
+        show_pros_cons: payload.show_pros_cons ?? true,
+        custom_pros: payload.custom_pros ?? null,
+        custom_cons: payload.custom_cons ?? null,
+      };
       if (pos != null) {
         editor
           .chain()
           .focus()
           .setNodeSelection(pos)
-          .updateAttributes("productBox", {
-            productId: payload.productId,
-            productName: payload.productName,
-            config: JSON.stringify(payload.config),
-          })
+          .updateAttributes("productBox", attrs)
           .run();
         productEditPositionRef.current = null;
       } else {
-        editor.chain().focus().setProductBox(payload).run();
+        editor.chain().focus().setProductBox({ ...payload, config: payload.config }).run();
       }
       setProductModalOpen(false);
       setProductEditState(null);

@@ -3,7 +3,7 @@
 import { NodeViewWrapper } from "@tiptap/react";
 import type { NodeViewProps } from "@tiptap/react";
 import { Settings2 } from "lucide-react";
-import type { ProductBoxConfig } from "@/components/admin/editor/extensions/ProductBox";
+import type { ProductBoxConfig, ProductBoxTemplate } from "@/components/admin/editor/extensions/ProductBox";
 import {
   DEFAULT_PRODUCT_BOX_CONFIG,
   PRODUCT_BOX_EDIT_EVENT,
@@ -55,6 +55,14 @@ export function ProductBoxNodeView({ node, getPos, editor }: NodeViewProps) {
           productId,
           productName,
           config,
+          template: (node.attrs.template as ProductBoxTemplate) ?? "full_card",
+          show_image: node.attrs.show_image !== false,
+          show_award: node.attrs.show_award !== false,
+          show_specs: node.attrs.show_specs !== false,
+          show_breakdown: node.attrs.show_breakdown !== false,
+          show_pros_cons: node.attrs.show_pros_cons !== false,
+          custom_pros: node.attrs.custom_pros ?? null,
+          custom_cons: node.attrs.custom_cons ?? null,
           position: pos,
         },
       })

@@ -74,14 +74,26 @@ function parseConfig(raw: string | undefined): ProductBoxConfig {
   }
 }
 
+export type ProductBoxTemplate = "full_card" | "compact" | "spec_sheet";
+
+export type ProductBoxAttrs = {
+  productId: string;
+  productName?: string;
+  config?: ProductBoxConfig;
+  template?: ProductBoxTemplate;
+  show_image?: boolean;
+  show_award?: boolean;
+  show_specs?: boolean;
+  show_breakdown?: boolean;
+  show_pros_cons?: boolean;
+  custom_pros?: string | null;
+  custom_cons?: string | null;
+};
+
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     productBox: {
-      setProductBox: (attrs: {
-        productId: string;
-        productName?: string;
-        config?: ProductBoxConfig;
-      }) => ReturnType;
+      setProductBox: (attrs: ProductBoxAttrs) => ReturnType;
     };
   }
 }
@@ -111,6 +123,52 @@ export const ProductBoxExtension = Node.create({
         parseHTML: (el) => el.getAttribute("data-product-config") ?? JSON.stringify(DEFAULT_PRODUCT_BOX_CONFIG),
         renderHTML: (attrs) => ({ "data-product-config": attrs.config }),
       },
+      template: {
+        default: "full_card",
+        parseHTML: (el) => (el.getAttribute("data-template") as "full_card" | "compact" | "spec_sheet") ?? "full_card",
+        renderHTML: (attrs) => ({ "data-template": attrs.template ?? "full_card" }),
+      },
+      show_image: {
+        default: true,
+        parseHTML: (el) => el.getAttribute("data-show-image") !== "false",
+        renderHTML: (attrs) => ({ "data-show-image": attrs.show_image === false ? "false" : "true" }),
+      },
+      show_award: {
+        default: true,
+        parseHTML: (el) => el.getAttribute("data-show-award") !== "false",
+        renderHTML: (attrs) => ({ "data-show-award": attrs.show_award === false ? "false" : "true" }),
+      },
+      show_specs: {
+        default: true,
+        parseHTML: (el) => el.getAttribute("data-show-specs") !== "false",
+        renderHTML: (attrs) => ({ "data-show-specs": attrs.show_specs === false ? "false" : "true" }),
+      },
+      show_breakdown: {
+        default: true,
+        parseHTML: (el) => el.getAttribute("data-show-breakdown") !== "false",
+        renderHTML: (attrs) => ({ "data-show-breakdown": attrs.show_breakdown === false ? "false" : "true" }),
+      },
+      show_pros_cons: {
+        default: true,
+        parseHTML: (el) => el.getAttribute("data-show-pros-cons") !== "false",
+        renderHTML: (attrs) => ({ "data-show-pros-cons": attrs.show_pros_cons === false ? "false" : "true" }),
+      },
+      custom_pros: {
+        default: null,
+        parseHTML: (el) => el.getAttribute("data-custom-pros") ?? null,
+        renderHTML: (attrs) =>
+          attrs.custom_pros != null && attrs.custom_pros !== ""
+            ? { "data-custom-pros": typeof attrs.custom_pros === "string" ? attrs.custom_pros : JSON.stringify(attrs.custom_pros) }
+            : {},
+      },
+      custom_cons: {
+        default: null,
+        parseHTML: (el) => el.getAttribute("data-custom-cons") ?? null,
+        renderHTML: (attrs) =>
+          attrs.custom_cons != null && attrs.custom_cons !== ""
+            ? { "data-custom-cons": typeof attrs.custom_cons === "string" ? attrs.custom_cons : JSON.stringify(attrs.custom_cons) }
+            : {},
+      },
     };
   },
 
@@ -129,6 +187,18 @@ export const ProductBoxExtension = Node.create({
       "data-product-id": node.attrs.productId,
       "data-product-name": node.attrs.productName,
       "data-product-config": node.attrs.config,
+      "data-template": node.attrs.template ?? "full_card",
+      "data-show-image": node.attrs.show_image === false ? "false" : "true",
+      "data-show-award": node.attrs.show_award === false ? "false" : "true",
+      "data-show-specs": node.attrs.show_specs === false ? "false" : "true",
+      "data-show-breakdown": node.attrs.show_breakdown === false ? "false" : "true",
+      "data-show-pros-cons": node.attrs.show_pros_cons === false ? "false" : "true",
+      ...(node.attrs.custom_pros != null && node.attrs.custom_pros !== ""
+        ? { "data-custom-pros": typeof node.attrs.custom_pros === "string" ? node.attrs.custom_pros : JSON.stringify(node.attrs.custom_pros) }
+        : {}),
+      ...(node.attrs.custom_cons != null && node.attrs.custom_cons !== ""
+        ? { "data-custom-cons": typeof node.attrs.custom_cons === "string" ? node.attrs.custom_cons : JSON.stringify(node.attrs.custom_cons) }
+        : {}),
     });
 
     return [
@@ -153,7 +223,7 @@ export const ProductBoxExtension = Node.create({
   addCommands() {
     return {
       setProductBox:
-        (attrs: { productId: string; productName?: string; config?: ProductBoxConfig }) =>
+        (attrs: ProductBoxAttrs) =>
         ({ commands }) => {
           return commands.insertContent({
             type: this.name,
@@ -164,6 +234,14 @@ export const ProductBoxExtension = Node.create({
                 ...DEFAULT_PRODUCT_BOX_CONFIG,
                 ...attrs.config,
               }),
+              template: attrs.template ?? "full_card",
+              show_image: attrs.show_image ?? true,
+              show_award: attrs.show_award ?? true,
+              show_specs: attrs.show_specs ?? true,
+              show_breakdown: attrs.show_breakdown ?? true,
+              show_pros_cons: attrs.show_pros_cons ?? true,
+              custom_pros: attrs.custom_pros ?? null,
+              custom_cons: attrs.custom_cons ?? null,
             },
           });
         },

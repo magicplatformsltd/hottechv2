@@ -8,7 +8,7 @@ import { getCategories } from "@/lib/actions/categories";
 import { getAwards, getAwardById } from "@/lib/actions/award";
 import type { ProductAwardRecord } from "@/lib/types/award";
 import type { Product } from "@/lib/types/product";
-import type { ProductBoxConfig, ProductBoxImageType } from "./extensions/ProductBox";
+import type { ProductBoxConfig, ProductBoxImageType, ProductBoxTemplate } from "./extensions/ProductBox";
 import { DEFAULT_PRODUCT_BOX_CONFIG } from "./extensions/ProductBox";
 import { ProductForm } from "@/components/admin/ProductForm";
 import { CURRENCY_OPTIONS } from "@/lib/constants/currencies";
@@ -38,6 +38,14 @@ export type ProductBoxInsertPayload = {
   productId: string;
   productName: string;
   config: ProductBoxConfig;
+  template?: ProductBoxTemplate;
+  show_image?: boolean;
+  show_award?: boolean;
+  show_specs?: boolean;
+  show_breakdown?: boolean;
+  show_pros_cons?: boolean;
+  custom_pros?: string | null;
+  custom_cons?: string | null;
 };
 
 type ProductInjectionModalProps = {
@@ -45,11 +53,7 @@ type ProductInjectionModalProps = {
   onClose: () => void;
   onInsert: (payload: ProductBoxInsertPayload) => void;
   /** When set, open in "edit" mode with this node's data (config step only). */
-  editState?: {
-    productId: string;
-    productName: string;
-    config: ProductBoxConfig;
-  } | null;
+  editState?: ProductBoxInsertPayload | null;
 };
 
 export function ProductInjectionModal({
@@ -67,6 +71,14 @@ export function ProductInjectionModal({
   const [fetchedProduct, setFetchedProduct] = useState<Product | null>(null);
   const [fetchingProduct, setFetchingProduct] = useState(false);
   const [config, setConfig] = useState<ProductBoxConfig>({ ...DEFAULT_PRODUCT_BOX_CONFIG });
+  const [template, setTemplate] = useState<ProductBoxTemplate>("full_card");
+  const [show_image, setShow_image] = useState(true);
+  const [show_award, setShow_award] = useState(true);
+  const [show_specs, setShow_specs] = useState(true);
+  const [show_breakdown, setShow_breakdown] = useState(true);
+  const [show_pros_cons, setShow_pros_cons] = useState(true);
+  const [custom_pros, setCustom_pros] = useState("");
+  const [custom_cons, setCustom_cons] = useState("");
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerTemplates, setDrawerTemplates] = useState<Awaited<ReturnType<typeof getTemplates>>>([]);
   const [drawerCategories, setDrawerCategories] = useState<Awaited<ReturnType<typeof getCategories>>>([]);
@@ -97,6 +109,38 @@ export function ProductInjectionModal({
       setStep("configure");
       setSelectedProduct({ id: editState.productId, name: editState.productName } as Product);
       setConfig({ ...DEFAULT_PRODUCT_BOX_CONFIG, ...editState.config });
+      setTemplate(editState.template ?? "full_card");
+      setShow_image(editState.show_image ?? true);
+      setShow_award(editState.show_award ?? true);
+      setShow_specs(editState.show_specs ?? true);
+      setShow_breakdown(editState.show_breakdown ?? true);
+      setShow_pros_cons(editState.show_pros_cons ?? true);
+      try {
+        const rawPros = editState.custom_pros;
+        if (Array.isArray(rawPros)) {
+          setCustom_pros(rawPros.join("\n"));
+        } else if (typeof rawPros === "string") {
+          const parsed = JSON.parse(rawPros);
+          setCustom_pros(Array.isArray(parsed) ? parsed.join("\n") : rawPros);
+        } else {
+          setCustom_pros("");
+        }
+      } catch {
+        setCustom_pros(typeof editState.custom_pros === "string" ? editState.custom_pros : "");
+      }
+      try {
+        const rawCons = editState.custom_cons;
+        if (Array.isArray(rawCons)) {
+          setCustom_cons(rawCons.join("\n"));
+        } else if (typeof rawCons === "string") {
+          const parsed = JSON.parse(rawCons);
+          setCustom_cons(Array.isArray(parsed) ? parsed.join("\n") : rawCons);
+        } else {
+          setCustom_cons("");
+        }
+      } catch {
+        setCustom_cons(typeof editState.custom_cons === "string" ? editState.custom_cons : "");
+      }
       setSearchQuery("");
       setSearchResults([]);
       setFetchedProduct(null);
@@ -107,6 +151,14 @@ export function ProductInjectionModal({
       setFetchedProduct(null);
       setFetchingProduct(false);
       setConfig({ ...DEFAULT_PRODUCT_BOX_CONFIG });
+      setTemplate("full_card");
+      setShow_image(true);
+      setShow_award(true);
+      setShow_specs(true);
+      setShow_breakdown(true);
+      setShow_pros_cons(true);
+      setCustom_pros("");
+      setCustom_cons("");
       setSearchQuery("");
       setSearchResults([]);
     }
@@ -167,7 +219,38 @@ export function ProductInjectionModal({
       includeAffiliateButtons: true,
       selectedAffiliates: affKeys,
     });
+    setTemplate("full_card");
+    setShow_image(true);
+    setShow_award(true);
+    setShow_specs(true);
+    setShow_breakdown(true);
+    setShow_pros_cons(true);
+    setCustom_pros("");
+    setCustom_cons("");
     setStep("configure");
+  }, []);
+
+  const handleTemplateChange = useCallback((templateId: ProductBoxTemplate) => {
+    setTemplate(templateId);
+    if (templateId === "full_card") {
+      setShow_image(true);
+      setShow_award(true);
+      setShow_specs(true);
+      setShow_breakdown(true);
+      setShow_pros_cons(true);
+    } else if (templateId === "compact") {
+      setShow_image(true);
+      setShow_award(true);
+      setShow_specs(false);
+      setShow_breakdown(false);
+      setShow_pros_cons(false);
+    } else if (templateId === "spec_sheet") {
+      setShow_image(false);
+      setShow_award(false);
+      setShow_specs(true);
+      setShow_breakdown(false);
+      setShow_pros_cons(false);
+    }
   }, []);
 
   const handleBack = useCallback(() => {
@@ -179,13 +262,23 @@ export function ProductInjectionModal({
   const handleInsert = useCallback(() => {
     const product = productContext ?? selectedProduct;
     if (!product) return;
+    const prosTrimmed = custom_pros.trim();
+    const consTrimmed = custom_cons.trim();
     onInsert({
       productId: product.id,
       productName: product.name ?? editState?.productName ?? "",
       config,
+      template,
+      show_image,
+      show_award,
+      show_specs,
+      show_breakdown,
+      show_pros_cons,
+      custom_pros: prosTrimmed ? JSON.stringify(prosTrimmed.split(/\n/).map((s) => s.trim()).filter(Boolean)) : null,
+      custom_cons: consTrimmed ? JSON.stringify(consTrimmed.split(/\n/).map((s) => s.trim()).filter(Boolean)) : null,
     });
     onClose();
-  }, [productContext, selectedProduct, editState?.productName, config, onInsert, onClose]);
+  }, [productContext, selectedProduct, editState?.productName, config, template, show_image, show_award, show_specs, show_breakdown, show_pros_cons, custom_pros, custom_cons, onInsert, onClose]);
 
   const toggleKeySpec = useCallback((key: string) => {
     setConfig((prev) => {
@@ -341,268 +434,316 @@ export function ProductInjectionModal({
                 </button>
               </div>
 
-              <div className="space-y-3">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={config.showImage ?? true}
-                    onChange={(e) => setConfig((c) => ({ ...c, showImage: e.target.checked }))}
-                    className="rounded border-white/20"
-                  />
-                  <span className="font-sans text-sm text-hot-white">Show Image</span>
+              <div>
+                <label className="block font-sans text-sm font-medium text-gray-400 mb-1">
+                  Display Template
                 </label>
-                {(config.showImage ?? true) && (
-                  <div className="ml-6 flex gap-4">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="imageType"
-                        checked={(config.imageType ?? "transparent") === "transparent"}
-                        onChange={() => setConfig((c) => ({ ...c, imageType: "transparent" as ProductBoxImageType }))}
-                        className="rounded-full border-white/20"
-                      />
-                      <span className="font-sans text-sm text-gray-300">Product (Transparent)</span>
-                    </label>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="radio"
-                        name="imageType"
-                        checked={(config.imageType ?? "transparent") === "hero"}
-                        onChange={() => setConfig((c) => ({ ...c, imageType: "hero" as ProductBoxImageType }))}
-                        className="rounded-full border-white/20"
-                      />
-                      <span className="font-sans text-sm text-gray-300">Lifestyle (Hero)</span>
-                    </label>
-                  </div>
-                )}
+                <select
+                  value={template}
+                  onChange={(e) => handleTemplateChange(e.target.value as ProductBoxTemplate)}
+                  className="w-full rounded-md border border-white/20 bg-white/5 px-3 py-2 font-sans text-sm text-hot-white focus:border-hot-white/50 focus:outline-none"
+                >
+                  <option value="full_card">Full Review</option>
+                  <option value="compact">Compact Deal</option>
+                  <option value="spec_sheet">Spec Sheet</option>
+                </select>
+              </div>
 
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={config.showAward ?? true}
-                    onChange={(e) => setConfig((c) => ({ ...c, showAward: e.target.checked }))}
-                    className="rounded border-white/20"
-                  />
-                  <span className="font-sans text-sm text-hot-white">Show Award Badge</span>
-                  {productAward && (
-                    <span className="text-xs text-gray-500">
-                      ({productAward.name})
-                    </span>
-                  )}
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={config.showStarRating ?? true}
-                    onChange={(e) => setConfig((c) => ({ ...c, showStarRating: e.target.checked }))}
-                    className="rounded border-white/20"
-                  />
-                  <span className="font-sans text-sm text-hot-white">Show Star Rating</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={config.showProsCons ?? true}
-                    onChange={(e) => setConfig((c) => ({ ...c, showProsCons: e.target.checked }))}
-                    className="rounded border-white/20"
-                  />
-                  <span className="font-sans text-sm text-hot-white">Show Pros & Cons</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={config.showKeySpecs ?? true}
-                    onChange={(e) => handleInsertSpecsChange(e.target.checked)}
-                    className="rounded border-white/20"
-                  />
-                  <span className="font-sans text-sm text-hot-white">Insert Specs</span>
-                </label>
-                {config.showKeySpecs && specKeys.length > 0 && (
-                  <div className="ml-6 space-y-1.5">
-                    <p className="text-xs text-gray-500">Uncheck specs to hide them:</p>
-                    {specKeys.map((key) => (
-                      <label key={key} className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={(config.keySpecKeys ?? []).includes(key)}
-                          onChange={() => toggleKeySpec(key)}
-                          className="rounded border-white/20"
-                        />
-                        <span className="font-sans text-sm text-gray-300">{key}</span>
-                      </label>
-                    ))}
+              <details className="w-full border border-white/10 rounded-lg mt-4 overflow-hidden" open>
+                <summary className="font-bold cursor-pointer p-4 bg-white/5 hover:bg-white/10 list-none flex items-center gap-2">
+                  <span>⚙️ Customize Fields & Overrides</span>
+                </summary>
+                <div className="p-4 pt-0 space-y-3 border-t border-white/10">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={show_image}
+                        onChange={(e) => setShow_image(e.target.checked)}
+                        className="rounded border-white/20"
+                      />
+                      <span className="font-sans text-sm text-hot-white">Show Image</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={show_award}
+                        onChange={(e) => setShow_award(e.target.checked)}
+                        className="rounded border-white/20"
+                      />
+                      <span className="font-sans text-sm text-hot-white">Show Award</span>
+                      {productAward && <span className="text-xs text-gray-500">({productAward.name})</span>}
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={show_specs}
+                        onChange={(e) => setShow_specs(e.target.checked)}
+                        className="rounded border-white/20"
+                      />
+                      <span className="font-sans text-sm text-hot-white">Show Specs</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={show_breakdown}
+                        onChange={(e) => setShow_breakdown(e.target.checked)}
+                        className="rounded border-white/20"
+                      />
+                      <span className="font-sans text-sm text-hot-white">Show Breakdown</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={show_pros_cons}
+                        onChange={(e) => setShow_pros_cons(e.target.checked)}
+                        className="rounded border-white/20"
+                      />
+                      <span className="font-sans text-sm text-hot-white">Show Pros/Cons</span>
+                    </label>
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={config.showStarRating ?? true}
+                        onChange={(e) => setConfig((c) => ({ ...c, showStarRating: e.target.checked }))}
+                        className="rounded border-white/20"
+                      />
+                      <span className="font-sans text-sm text-hot-white">Show Star Rating</span>
+                    </label>
                   </div>
-                )}
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={config.includeAffiliateButtons ?? true}
-                    onChange={(e) => handleIncludeAffiliateButtonsChange(e.target.checked)}
-                    className="rounded border-white/20"
-                  />
-                  <span className="font-sans text-sm text-hot-white">Include Affiliate &quot;Buy&quot; Buttons</span>
-                </label>
-                {(config.includeAffiliateButtons ?? true) && affiliateKeys.length > 0 && (
-                  <div className="ml-6 space-y-2">
-                    <p className="text-xs text-gray-500">Uncheck to hide. Optional: price, currency, CTA text, and visibility.</p>
-                    {affiliateKeys.map((key) => {
-                      const selected = (config.selectedAffiliates ?? []).includes(key);
-                      const overrides = config.affiliatePriceOverrides ?? {};
-                      const row = overrides[key] ?? {};
-                      const showPrice = row.show_price !== false;
-                      const showRetailer = row.show_retailer !== false;
-                      return (
-                        <div key={key} className="rounded border border-white/10 bg-white/5 p-2 space-y-2">
-                          <label className="flex items-center gap-2 cursor-pointer">
+
+                  {show_image && (
+                    <div className="ml-0 flex gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="imageType"
+                          checked={(config.imageType ?? "transparent") === "transparent"}
+                          onChange={() => setConfig((c) => ({ ...c, imageType: "transparent" as ProductBoxImageType }))}
+                          className="rounded-full border-white/20"
+                        />
+                        <span className="font-sans text-sm text-gray-300">Product (Transparent)</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="imageType"
+                          checked={(config.imageType ?? "transparent") === "hero"}
+                          onChange={() => setConfig((c) => ({ ...c, imageType: "hero" as ProductBoxImageType }))}
+                          className="rounded-full border-white/20"
+                        />
+                        <span className="font-sans text-sm text-gray-300">Lifestyle (Hero)</span>
+                      </label>
+                    </div>
+                  )}
+
+                  {show_specs && (
+                    <div className="space-y-1.5">
+                      <p className="text-xs text-gray-500">Key specs to include:</p>
+                      <div className="flex flex-wrap gap-x-4 gap-y-1">
+                        {specKeys.map((key) => (
+                          <label key={key} className="flex items-center gap-2 cursor-pointer">
                             <input
                               type="checkbox"
-                              checked={selected}
-                              onChange={() => toggleAffiliate(key)}
+                              checked={(config.keySpecKeys ?? []).includes(key)}
+                              onChange={() => toggleKeySpec(key)}
                               className="rounded border-white/20"
                             />
                             <span className="font-sans text-sm text-gray-300">{key}</span>
                           </label>
-                          {selected && (
-                            <div className="pl-6 space-y-2">
-                              <input
-                                type="text"
-                                value={row.cta_text ?? ""}
-                                onChange={(e) =>
-                                  setConfig((c) => ({
-                                    ...c,
-                                    affiliatePriceOverrides: {
-                                      ...(c.affiliatePriceOverrides ?? {}),
-                                      [key]: { ...(c.affiliatePriceOverrides?.[key] ?? {}), cta_text: e.target.value },
-                                    },
-                                  }))
-                                }
-                                placeholder="CTA text (e.g. Buy now)"
-                                className="w-full rounded border border-white/20 bg-white/5 px-2 py-1.5 text-sm text-hot-white placeholder:text-gray-500"
-                              />
-                              <div className="flex flex-wrap items-center gap-2">
-                                <input
-                                  type="text"
-                                  value={row.price_amount ?? ""}
-                                  onChange={(e) =>
-                                    setConfig((c) => ({
-                                      ...c,
-                                      affiliatePriceOverrides: {
-                                        ...(c.affiliatePriceOverrides ?? {}),
-                                        [key]: { ...(c.affiliatePriceOverrides?.[key] ?? {}), price_amount: e.target.value },
-                                      },
-                                    }))
-                                  }
-                                  placeholder="Price (e.g. 49.99)"
-                                  className="flex-1 min-w-[80px] rounded border border-white/20 bg-white/5 px-2 py-1.5 text-sm text-hot-white placeholder:text-gray-500"
-                                />
-                                <select
-                                  value={row.price_currency ?? ""}
-                                  onChange={(e) =>
-                                    setConfig((c) => ({
-                                      ...c,
-                                      affiliatePriceOverrides: {
-                                        ...(c.affiliatePriceOverrides ?? {}),
-                                        [key]: { ...(c.affiliatePriceOverrides?.[key] ?? {}), price_currency: e.target.value },
-                                      },
-                                    }))
-                                  }
-                                  className="rounded border border-white/20 bg-white/5 px-2 py-1.5 text-sm text-hot-white"
-                                  title="Currency"
-                                >
-                                  <option value="">Currency</option>
-                                  {CURRENCY_OPTIONS.map((opt) => (
-                                    <option key={opt.code} value={opt.code}>
-                                      {opt.label}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                              <div className="flex flex-wrap items-center gap-4">
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={showPrice}
-                                    onChange={(e) =>
-                                      setConfig((c) => ({
-                                        ...c,
-                                        affiliatePriceOverrides: {
-                                          ...(c.affiliatePriceOverrides ?? {}),
-                                          [key]: { ...(c.affiliatePriceOverrides?.[key] ?? {}), show_price: e.target.checked },
-                                        },
-                                      }))
-                                    }
-                                    className="rounded border-white/20"
-                                  />
-                                  <span className="font-sans text-xs text-gray-400">Show price</span>
-                                </label>
-                                <label className="flex items-center gap-2 cursor-pointer">
-                                  <input
-                                    type="checkbox"
-                                    checked={showRetailer}
-                                    onChange={(e) =>
-                                      setConfig((c) => ({
-                                        ...c,
-                                        affiliatePriceOverrides: {
-                                          ...(c.affiliatePriceOverrides ?? {}),
-                                          [key]: { ...(c.affiliatePriceOverrides?.[key] ?? {}), show_retailer: e.target.checked },
-                                        },
-                                      }))
-                                    }
-                                    className="rounded border-white/20"
-                                  />
-                                  <span className="font-sans text-xs text-gray-400">Show retailer</span>
-                                </label>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-
-                <div>
-                  {productContext?.editorial_data?.bottom_line != null &&
-                    String(productContext.editorial_data.bottom_line).trim() !== "" && (
-                    <div className="mb-3 rounded-md border border-white/10 bg-white/5 overflow-hidden">
-                      <div className="flex items-center justify-end gap-2 border-b border-white/10 bg-white/5 px-2 py-1">
-                        <span className="text-[10px] font-medium uppercase tracking-wide text-gray-500">
-                          Global Reference (Read-only)
-                        </span>
-                      </div>
-                      <div
-                        className="max-h-24 overflow-y-auto px-3 py-2 font-mono text-xs italic text-gray-400"
-                        aria-readonly
-                      >
-                        {productContext.editorial_data.bottom_line}
+                        ))}
+                        {specKeys.length === 0 && <span className="text-xs text-gray-500">No specs on product.</span>}
                       </div>
                     </div>
                   )}
-                  <label className="block font-sans text-sm font-medium text-gray-400 mb-1">
-                    Post-Specific Bottom Line
-                  </label>
-                  <textarea
-                    value={config.descriptionOverride ?? ""}
-                    onChange={(e) => setConfig((c) => ({ ...c, descriptionOverride: e.target.value }))}
-                    placeholder="Override for this post only…"
-                    rows={3}
-                    className="w-full rounded-md border border-white/20 bg-white/5 px-3 py-2 font-sans text-sm text-hot-white placeholder:text-gray-500 focus:border-hot-white/50 focus:outline-none resize-y"
-                  />
-                  <p className="mt-1 text-xs text-gray-500">
-                    If left blank, the global &quot;Bottom Line&quot; from the database will be used.
-                  </p>
-                </div>
 
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={config.showReleaseDate ?? true}
-                    onChange={(e) => setConfig((c) => ({ ...c, showReleaseDate: e.target.checked }))}
-                    className="rounded border-white/20"
-                  />
-                  <span className="font-sans text-sm text-hot-white">Show Release Date</span>
-                </label>
-              </div>
+                  <div>
+                    {productContext?.editorial_data?.bottom_line != null &&
+                      String(productContext.editorial_data.bottom_line).trim() !== "" && (
+                      <div className="mb-2 rounded-md border border-white/10 bg-white/5 overflow-hidden">
+                        <div className="flex items-center justify-end gap-2 border-b border-white/10 bg-white/5 px-2 py-1">
+                          <span className="text-[10px] font-medium uppercase tracking-wide text-gray-500">
+                            Global Reference (Read-only)
+                          </span>
+                        </div>
+                        <div className="max-h-24 overflow-y-auto px-3 py-2 font-mono text-xs italic text-gray-400" aria-readonly>
+                          {productContext.editorial_data.bottom_line}
+                        </div>
+                      </div>
+                    )}
+                    <label className="block font-sans text-sm font-medium text-gray-400 mb-1">Post-Specific Bottom Line</label>
+                    <textarea
+                      value={config.descriptionOverride ?? ""}
+                      onChange={(e) => setConfig((c) => ({ ...c, descriptionOverride: e.target.value }))}
+                      placeholder="Override for this post only…"
+                      rows={2}
+                      className="w-full rounded-md border border-white/20 bg-white/5 px-3 py-2 font-sans text-sm text-hot-white placeholder:text-gray-500 focus:border-hot-white/50 focus:outline-none resize-y"
+                    />
+                  </div>
+
+                  {show_pros_cons && (
+                    <>
+                      <div>
+                        <label className="block font-sans text-sm font-medium text-gray-400 mb-1">Custom Pros Override</label>
+                        <textarea
+                          value={custom_pros}
+                          onChange={(e) => setCustom_pros(e.target.value)}
+                          placeholder="One per line (leave blank to use global pros)"
+                          rows={2}
+                          className="w-full rounded-md border border-white/20 bg-white/5 px-3 py-2 font-sans text-sm text-hot-white placeholder:text-gray-500 focus:border-hot-white/50 focus:outline-none resize-y"
+                        />
+                      </div>
+                      <div>
+                        <label className="block font-sans text-sm font-medium text-gray-400 mb-1">Custom Cons Override</label>
+                        <textarea
+                          value={custom_cons}
+                          onChange={(e) => setCustom_cons(e.target.value)}
+                          placeholder="One per line (leave blank to use global cons)"
+                          rows={2}
+                          className="w-full rounded-md border border-white/20 bg-white/5 px-3 py-2 font-sans text-sm text-hot-white placeholder:text-gray-500 focus:border-hot-white/50 focus:outline-none resize-y"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={config.includeAffiliateButtons ?? true}
+                      onChange={(e) => handleIncludeAffiliateButtonsChange(e.target.checked)}
+                      className="rounded border-white/20"
+                    />
+                    <span className="font-sans text-sm text-hot-white">Include Affiliate &quot;Buy&quot; Buttons</span>
+                  </label>
+                  {(config.includeAffiliateButtons ?? true) && affiliateKeys.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-xs text-gray-500">Optional: price, currency, CTA text, and visibility per retailer.</p>
+                      {affiliateKeys.map((key) => {
+                        const selected = (config.selectedAffiliates ?? []).includes(key);
+                        const row = (config.affiliatePriceOverrides ?? {})[key] ?? {};
+                        const showPrice = row.show_price !== false;
+                        const showRetailer = row.show_retailer !== false;
+                        return (
+                          <div key={key} className="rounded border border-white/10 bg-white/5 p-2 space-y-2">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={selected}
+                                onChange={() => toggleAffiliate(key)}
+                                className="rounded border-white/20"
+                              />
+                              <span className="font-sans text-sm text-gray-300">{key}</span>
+                            </label>
+                            {selected && (
+                              <div className="pl-6 space-y-2">
+                                <input
+                                  type="text"
+                                  value={row.cta_text ?? ""}
+                                  onChange={(e) =>
+                                    setConfig((c) => ({
+                                      ...c,
+                                      affiliatePriceOverrides: {
+                                        ...(c.affiliatePriceOverrides ?? {}),
+                                        [key]: { ...(c.affiliatePriceOverrides?.[key] ?? {}), cta_text: e.target.value },
+                                      },
+                                    }))
+                                  }
+                                  placeholder="CTA text (e.g. Buy now)"
+                                  className="w-full rounded border border-white/20 bg-white/5 px-2 py-1.5 text-sm text-hot-white placeholder:text-gray-500"
+                                />
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <input
+                                    type="text"
+                                    value={row.price_amount ?? ""}
+                                    onChange={(e) =>
+                                      setConfig((c) => ({
+                                        ...c,
+                                        affiliatePriceOverrides: {
+                                          ...(c.affiliatePriceOverrides ?? {}),
+                                          [key]: { ...(c.affiliatePriceOverrides?.[key] ?? {}), price_amount: e.target.value },
+                                        },
+                                      }))
+                                    }
+                                    placeholder="Price (e.g. 49.99)"
+                                    className="flex-1 min-w-[80px] rounded border border-white/20 bg-white/5 px-2 py-1.5 text-sm text-hot-white placeholder:text-gray-500"
+                                  />
+                                  <select
+                                    value={row.price_currency ?? ""}
+                                    onChange={(e) =>
+                                      setConfig((c) => ({
+                                        ...c,
+                                        affiliatePriceOverrides: {
+                                          ...(c.affiliatePriceOverrides ?? {}),
+                                          [key]: { ...(c.affiliatePriceOverrides?.[key] ?? {}), price_currency: e.target.value },
+                                        },
+                                      }))
+                                    }
+                                    className="rounded border border-white/20 bg-white/5 px-2 py-1.5 text-sm text-hot-white"
+                                    title="Currency"
+                                  >
+                                    <option value="">Currency</option>
+                                    {CURRENCY_OPTIONS.map((opt) => (
+                                      <option key={opt.code} value={opt.code}>
+                                        {opt.label}
+                                      </option>
+                                    ))}
+                                  </select>
+                                </div>
+                                <div className="flex flex-wrap items-center gap-4">
+                                  <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={showPrice}
+                                      onChange={(e) =>
+                                        setConfig((c) => ({
+                                          ...c,
+                                          affiliatePriceOverrides: {
+                                            ...(c.affiliatePriceOverrides ?? {}),
+                                            [key]: { ...(c.affiliatePriceOverrides?.[key] ?? {}), show_price: e.target.checked },
+                                          },
+                                        }))
+                                      }
+                                      className="rounded border-white/20"
+                                    />
+                                    <span className="font-sans text-xs text-gray-400">Show price</span>
+                                  </label>
+                                  <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                      type="checkbox"
+                                      checked={showRetailer}
+                                      onChange={(e) =>
+                                        setConfig((c) => ({
+                                          ...c,
+                                          affiliatePriceOverrides: {
+                                            ...(c.affiliatePriceOverrides ?? {}),
+                                            [key]: { ...(c.affiliatePriceOverrides?.[key] ?? {}), show_retailer: e.target.checked },
+                                          },
+                                        }))
+                                      }
+                                      className="rounded border-white/20"
+                                    />
+                                    <span className="font-sans text-xs text-gray-400">Show retailer</span>
+                                  </label>
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={config.showReleaseDate ?? true}
+                      onChange={(e) => setConfig((c) => ({ ...c, showReleaseDate: e.target.checked }))}
+                      className="rounded border-white/20"
+                    />
+                    <span className="font-sans text-sm text-hot-white">Show Release Date</span>
+                  </label>
+                </div>
+              </details>
             </>
           )}
         </div>
