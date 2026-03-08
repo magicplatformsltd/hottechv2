@@ -22,6 +22,7 @@ import { ProductSpecsTable } from "@/components/public/ProductSpecsTable";
 import { AwardBadge } from "@/components/public/AwardBadge";
 import { ProductCarousel } from "@/components/ui/ProductCarousel";
 import { PostBody } from "@/components/posts/PostBody";
+import { ShowcaseGrid } from "@/components/posts/ShowcaseGrid";
 import { ViewTracker } from "@/components/analytics/ViewTracker";
 import { getBaseUrl } from "@/lib/url";
 import { generateProductSchema } from "@/lib/schema/product-jsonld";
@@ -77,6 +78,9 @@ type PageProps = {
   params: Promise<{ vertical: string; slug?: string[] }>;
   searchParams?: Promise<Record<string, string | string[] | undefined>>;
 };
+
+/** First-path segments that must never be treated as a vertical (avoids collision with admin/api routes). */
+const RESERVED_VERTICALS = ["admin", "api", "login"] as const;
 
 /** Level 1: Category Hub — valid template slug, no slug segments */
 async function resolveLevel1(vertical: string) {
@@ -145,6 +149,10 @@ async function resolveLevel2(vertical: string, slugPart: string) {
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
   const { vertical, slug } = await params;
   const slugParts = slug ?? [];
+
+  if (RESERVED_VERTICALS.includes(vertical as (typeof RESERVED_VERTICALS)[number])) {
+    return {};
+  }
 
   if (slugParts.length === 0) {
     const r = await resolveLevel1(vertical);
@@ -225,6 +233,11 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function VerticalPage({ params, searchParams: searchParamsPromise }: PageProps) {
   const { vertical, slug } = await params;
   const slugParts = slug ?? [];
+
+  if (RESERVED_VERTICALS.includes(vertical as (typeof RESERVED_VERTICALS)[number])) {
+    notFound();
+  }
+
   const baseUrl = getBaseUrl().replace(/\/$/, "");
   const searchParams = searchParamsPromise ? await searchParamsPromise : {};
   const isAdmin = await getIsAdmin();
@@ -504,6 +517,15 @@ export default async function VerticalPage({ params, searchParams: searchParamsP
                 </div>
               )}
               <PostBody html={(post as { content?: string; body?: string }).content || post.body || ""} className="prose prose-lg prose-invert mx-auto max-w-2xl max-w-none" />
+              {post.content_type_slug?.startsWith("showcase_") &&
+                Array.isArray(post.showcase_data) &&
+                post.showcase_data.length > 0 && (
+                  <ShowcaseGrid
+                    type={post.content_type_slug === "showcase_people" ? "people" : "products"}
+                    items={post.showcase_data as any}
+                    displayOptions={post.display_options}
+                  />
+                )}
             </article>
           </>
         );
@@ -821,6 +843,15 @@ export default async function VerticalPage({ params, searchParams: searchParamsP
           html={(post as { content?: string; body?: string }).content || post.body || ""}
           className="prose prose-lg prose-invert mx-auto max-w-2xl max-w-none"
         />
+        {post.content_type_slug?.startsWith("showcase_") &&
+          Array.isArray(post.showcase_data) &&
+          post.showcase_data.length > 0 && (
+            <ShowcaseGrid
+              type={post.content_type_slug === "showcase_people" ? "people" : "products"}
+              items={post.showcase_data as any}
+              displayOptions={post.display_options}
+            />
+          )}
       </article>
     </>
   );
